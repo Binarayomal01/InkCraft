@@ -14,6 +14,16 @@ router.post('/register', authRateLimit, asyncHandler(authController.registerUser
 // @access  Public
 router.post('/login', authRateLimit, asyncHandler(authController.loginUser));
 
+// @desc    Request password reset email
+// @route   POST /api/auth/forgot-password
+// @access  Public
+router.post('/forgot-password', authRateLimit, asyncHandler(authController.forgotPassword));
+
+// @desc    Reset password with token
+// @route   PUT /api/auth/reset-password/:token
+// @access  Public
+router.put('/reset-password/:token', authRateLimit, asyncHandler(authController.resetPassword));
+
 // @desc    Admin login
 // @route   POST /api/auth/admin/login
 // @access  Public

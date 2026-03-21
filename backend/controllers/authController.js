@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { User } = require('../models');
 
 // Generate JWT Token
@@ -9,6 +11,42 @@ const generateToken = (userId, role) => {
     process.env.JWT_SECRET || 'fallback_secret_key',
     { expiresIn: '24h' }
   );
+};
+
+const getEmailTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: Number(process.env.EMAIL_PORT) === 465,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+};
+
+const sendPasswordResetEmail = async (to, resetUrl) => {
+  const transporter = getEmailTransporter();
+  const from = process.env.EMAIL_FROM || 'no-reply@inkcraft.local';
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'InkCraft Password Reset',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Password Reset Request</h2>
+        <p>We received a request to reset your InkCraft account password.</p>
+        <p>Click the button below to set a new password. This link expires in 15 minutes.</p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}" style="background: #dc2626; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 6px; display: inline-block;">Reset Password</a>
+        </p>
+        <p>If the button does not work, copy and paste this URL into your browser:</p>
+        <p>${resetUrl}</p>
+        <p>If you did not request this, you can safely ignore this email.</p>
+      </div>
+    `
+  });
 };
 
 // @desc    Register a new user
@@ -311,6 +349,107 @@ const changePassword = async (req, res) => {
   }
 };
 
+// @desc    Request password reset email
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+      const resetToken = user.generatePasswordResetToken();
+      await user.save({ validateBeforeSave: false });
+
+      const clientUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
+
+      try {
+        await sendPasswordResetEmail(user.email, resetUrl);
+      } catch (emailError) {
+        user.resetPasswordToken = null;
+        user.resetPasswordExpires = null;
+        await user.save({ validateBeforeSave: false });
+
+        console.error('Forgot password email error:', emailError);
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to send reset email. Please try again later.'
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'If an account exists with that email, a reset link has been sent.'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while processing forgot password request'
+    });
+  }
+};
+
+// @desc    Reset password with token
+// @route   PUT /api/auth/reset-password/:token
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() }
+    }).select('+password');
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset token is invalid or expired'
+      });
+    }
+
+    user.password = password;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password reset successful. You can now sign in with your new password.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while resetting password'
+    });
+  }
+};
+
 // @desc    Admin login (same as regular login but validates admin role)
 // @route   POST /api/auth/admin/login
 // @access  Public
@@ -406,6 +545,8 @@ module.exports = {
   getUserProfile,
   updateUserProfile,
   changePassword,
+  forgotPassword,
+  resetPassword,
   adminLogin,
   verifyToken
 };

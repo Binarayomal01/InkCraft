@@ -11,6 +11,8 @@ import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
+import ForgotPassword from './pages/Auth/ForgotPassword';
+import ResetPassword from './pages/Auth/ResetPassword';
 import Gallery from './pages/Gallery';
 import Booking from './pages/Booking';
 import AIDesignGenerator from './pages/AIDesignGenerator';
@@ -56,6 +58,8 @@ function App() {
             {/* Auth Routes (No Layout) */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
 
             {/* User Protected Routes with Layout */}
             <Route
