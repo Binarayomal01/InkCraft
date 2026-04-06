@@ -1,5 +1,487 @@
 const { TattooDesign } = require('../models');
 
+const AI_STYLE_OPTIONS = [
+  'Traditional',
+  'Realistic',
+  'Watercolor',
+  'Minimalist',
+  'Geometric',
+  'Tribal',
+  'Japanese',
+  'Blackwork',
+  'Neo-Traditional',
+  'Abstract',
+  'Biomechanical',
+  'Portrait',
+  'Other'
+];
+
+const AI_SIZE_OPTIONS = [
+  'Small (2-4 inches)',
+  'Medium (4-8 inches)',
+  'Large (8+ inches)',
+  'Extra Large (12+ inches)'
+];
+
+const AI_PLACEMENT_OPTIONS = [
+  'Arm',
+  'Leg',
+  'Back',
+  'Chest',
+  'Shoulder',
+  'Wrist',
+  'Ankle',
+  'Neck',
+  'Hand',
+  'Ribcage',
+  'Hip',
+  'Foot',
+  'Other'
+];
+
+const AI_CATEGORY_OPTIONS = [
+  'Animals',
+  'Nature',
+  'Symbols',
+  'Text/Quotes',
+  'Portraits',
+  'Abstract',
+  'Geometric',
+  'Cultural',
+  'Religious',
+  'Fantasy',
+  'Horror',
+  'Other'
+];
+
+const AI_DIFFICULTY_OPTIONS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
+
+function parseImageDimension(value, fallback) {
+  const parsed = parseInt(value, 10);
+
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(1536, Math.max(512, parsed));
+}
+
+const AI_IMAGE_PROVIDER = (process.env.AI_IMAGE_PROVIDER || '').trim().toLowerCase() || 'pollinations';
+const AI_IMAGE_MODEL = (process.env.AI_IMAGE_MODEL || '').trim() || 'flux';
+const AI_IMAGE_WIDTH = parseImageDimension(process.env.AI_IMAGE_WIDTH, 1024);
+const AI_IMAGE_HEIGHT = parseImageDimension(process.env.AI_IMAGE_HEIGHT, 1024);
+
+const STUDIO_BASE_PROMPT = [
+  'You are InkCraft Studio\'s senior tattoo concept assistant.',
+  'Create design concepts that are artist-feasible, age well on skin, and map cleanly to body placement.',
+  'Prioritize clean line hierarchy, realistic session planning, and practical execution.',
+  'Avoid offensive, illegal, sexual, hateful, or unsafe content.',
+  'Return one production-ready consultation concept in structured form.'
+].join(' ');
+
+const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const toTitleCase = (value) => {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const parseListInput = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeString(item))
+      .filter(Boolean)
+      .slice(0, 8);
+  }
+
+  const normalized = normalizeString(value);
+  if (!normalized) return [];
+
+  return normalized
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+};
+
+const mapToAllowedValue = (value, allowedValues, fallbackValue) => {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return fallbackValue;
+
+  const directMatch = allowedValues.find((option) => option.toLowerCase() === normalized);
+  if (directMatch) return directMatch;
+
+  const partialMatch = allowedValues.find((option) =>
+    option.toLowerCase().includes(normalized) || normalized.includes(option.toLowerCase())
+  );
+
+  return partialMatch || fallbackValue;
+};
+
+const normalizeStyle = (style) => {
+  const styleAliases = {
+    realism: 'Realistic',
+    realistic: 'Realistic',
+    neo: 'Neo-Traditional',
+    'neo traditional': 'Neo-Traditional',
+    dotwork: 'Blackwork',
+    biomech: 'Biomechanical'
+  };
+
+  const normalized = normalizeString(style).toLowerCase();
+  if (styleAliases[normalized]) {
+    return styleAliases[normalized];
+  }
+
+  return mapToAllowedValue(style, AI_STYLE_OPTIONS, 'Traditional');
+};
+
+const normalizeSize = (size) => {
+  const normalized = normalizeString(size).toLowerCase();
+
+  if (normalized.includes('small') || normalized.includes('2-4')) {
+    return 'Small (2-4 inches)';
+  }
+  if (normalized.includes('large') && (normalized.includes('12') || normalized.includes('extra'))) {
+    return 'Extra Large (12+ inches)';
+  }
+  if (normalized.includes('large') || normalized.includes('8+')) {
+    return 'Large (8+ inches)';
+  }
+  if (normalized.includes('medium') || normalized.includes('4-8')) {
+    return 'Medium (4-8 inches)';
+  }
+
+  return mapToAllowedValue(size, AI_SIZE_OPTIONS, 'Medium (4-8 inches)');
+};
+
+const normalizeBodyPlacement = (bodyPlacement) =>
+  mapToAllowedValue(bodyPlacement, AI_PLACEMENT_OPTIONS, 'Arm');
+
+const normalizeColors = (colorsInput) => {
+  const normalized = normalizeString(colorsInput).toLowerCase();
+
+  if (!normalized) return 'Black & Grey';
+  if (normalized.includes('mixed')) return 'Mixed';
+  if (normalized.includes('black only')) return 'Black Only';
+  if (normalized.includes('color') || normalized.includes('vibrant') || normalized.includes('colour')) {
+    return 'Color';
+  }
+  if (normalized.includes('grey') || normalized.includes('gray')) {
+    return 'Black & Grey';
+  }
+  if (normalized.includes('black')) {
+    return 'Black Only';
+  }
+
+  return 'Mixed';
+};
+
+const inferCategoryFromInput = (input) => {
+  const combined = `${input.idea} ${input.theme}`.toLowerCase();
+
+  if (/(lion|wolf|dragon|tiger|bird|snake|butterfly|animal|pet)/.test(combined)) return 'Animals';
+  if (/(flower|rose|tree|mountain|ocean|moon|sun|nature|forest|leaf)/.test(combined)) return 'Nature';
+  if (/(mandala|geometric|pattern|linework|triangle|circle)/.test(combined)) return 'Geometric';
+  if (/(fantasy|myth|mythology|phoenix|magic)/.test(combined)) return 'Fantasy';
+  if (/(cross|religious|spiritual|sacred|prayer)/.test(combined)) return 'Religious';
+  if (/(quote|word|lettering|script|name|text)/.test(combined)) return 'Text/Quotes';
+  if (/(symbol|anchor|compass|infinity|heart)/.test(combined)) return 'Symbols';
+  if (/(portrait|face)/.test(combined)) return 'Portraits';
+  if (/(abstract|modern)/.test(combined)) return 'Abstract';
+
+  return 'Other';
+};
+
+const calculateComplexity = (input) => {
+  const baseTimeBySize = {
+    'Small (2-4 inches)': 1.5,
+    'Medium (4-8 inches)': 3,
+    'Large (8+ inches)': 5,
+    'Extra Large (12+ inches)': 8
+  };
+
+  const basePriceBySize = {
+    'Small (2-4 inches)': 160,
+    'Medium (4-8 inches)': 280,
+    'Large (8+ inches)': 540,
+    'Extra Large (12+ inches)': 900
+  };
+
+  const wordCount = input.idea.split(/\s+/).filter(Boolean).length;
+  const detailScoreFromWords = Math.min(6, Math.max(1, Math.floor(wordCount / 6)));
+  const detailScoreFromMustInclude = Math.min(4, input.mustInclude.length);
+  const moodBonus = input.mood ? 1 : 0;
+  const detailScore = detailScoreFromWords + detailScoreFromMustInclude + moodBonus;
+
+  const estimatedTime = Math.min(
+    20,
+    Number((baseTimeBySize[input.size] + detailScore * 0.6).toFixed(1))
+  );
+  const estimatedPrice = Math.min(
+    5000,
+    Math.round((basePriceBySize[input.size] + detailScore * 85) / 10) * 10
+  );
+
+  let difficulty = 'Beginner';
+  if (estimatedTime > 2.5) difficulty = 'Intermediate';
+  if (estimatedTime > 5) difficulty = 'Advanced';
+  if (estimatedTime > 8) difficulty = 'Expert';
+
+  return { estimatedTime, estimatedPrice, difficulty };
+};
+
+const buildStudioPrompt = (input) => {
+  const mustIncludeText = input.mustInclude.length > 0 ? input.mustInclude.join(', ') : 'None specified';
+  const avoidText = input.avoid.length > 0 ? input.avoid.join(', ') : 'None specified';
+
+  return [
+    STUDIO_BASE_PROMPT,
+    '',
+    'Customer brief:',
+    `- Main idea: ${input.idea}`,
+    `- Style: ${input.style}`,
+    `- Theme: ${input.theme || 'Custom'}`,
+    `- Placement: ${input.bodyPlacement}`,
+    `- Size: ${input.size}`,
+    `- Color preference: ${input.colorsInput || 'Not specified'}`,
+    `- Mood: ${input.mood || 'Not specified'}`,
+    `- Must include: ${mustIncludeText}`,
+    `- Avoid: ${avoidText}`,
+    input.additionalDetails ? `- Extra notes: ${input.additionalDetails}` : '- Extra notes: None',
+    '',
+    'Output rules:',
+    '- Return practical, tattooable concept details.',
+    '- Keep design readable after healing.',
+    '- Include artist feasibility notes for consultation.',
+    '- Return JSON with keys: title, description, category, colors, estimatedTime, estimatedPrice, difficulty, tags, elements, tips, variations, artistFeasibility, artistNotes.'
+  ].join('\n');
+};
+
+const buildSuggestionList = (input) => {
+  const suggestions = [
+    'Bring 2-3 visual references to your consultation so the artist can fine tune composition.',
+    'Ask for a stencil preview on the chosen body area before final approval.',
+    'Discuss line thickness and shading depth for better long-term aging.'
+  ];
+
+  if (input.mustInclude.length > 0) {
+    suggestions.push('Prioritize your must-include elements from most important to optional.');
+  }
+
+  if (input.avoid.length > 0) {
+    suggestions.push('Show your avoid list to the artist so they can adjust the concept early.');
+  }
+
+  return suggestions.slice(0, 4);
+};
+
+const slugifyTag = (value) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .slice(0, 24);
+
+const getPromptSeed = (input) => {
+  const source = `${input.idea}|${input.style}|${input.size}|${input.bodyPlacement}|${Date.now()}`;
+  let hash = 0;
+
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash << 5) - hash + source.charCodeAt(i);
+    hash |= 0;
+  }
+
+  return Math.abs(hash % 1000000);
+};
+
+const buildArtworkPrompt = (input) => {
+  const mustIncludeText = input.mustInclude.length > 0 ? input.mustInclude.join(', ') : 'none';
+  const avoidText = input.avoid.length > 0 ? input.avoid.join(', ') : 'none';
+
+  return [
+    'professional tattoo flash artwork',
+    `${input.style.toLowerCase()} style`,
+    `${input.bodyPlacement.toLowerCase()} placement composition`,
+    `main subject: ${input.idea}`,
+    `theme: ${input.theme || 'custom'}`,
+    `must include: ${mustIncludeText}`,
+    `avoid: ${avoidText}`,
+    `color direction: ${input.colorsInput || 'black and grey'}`,
+    `mood: ${input.mood || 'balanced and bold'}`,
+    'high detail linework, tattoo stencil quality, skin-safe contrast, clean silhouette',
+    'no text, no logo, no watermark, no UI elements'
+  ].join(', ');
+};
+
+const generateArtworkImageUrl = async (input) => {
+  if (AI_IMAGE_PROVIDER !== 'pollinations') {
+    throw new Error(`Unsupported AI_IMAGE_PROVIDER: ${AI_IMAGE_PROVIDER}`);
+  }
+
+  const prompt = buildArtworkPrompt(input);
+  const negativePrompt = [
+    'text',
+    'letters',
+    'watermark',
+    'logo',
+    'ui',
+    'concept card',
+    'dashboard',
+    'blurry',
+    'deformed'
+  ].join(', ');
+
+  const seed = getPromptSeed(input);
+  const promptPath = encodeURIComponent(prompt);
+  const imageUrl = new URL(`https://image.pollinations.ai/prompt/${promptPath}`);
+  imageUrl.searchParams.set('model', AI_IMAGE_MODEL);
+  imageUrl.searchParams.set('width', String(AI_IMAGE_WIDTH));
+  imageUrl.searchParams.set('height', String(AI_IMAGE_HEIGHT));
+  imageUrl.searchParams.set('seed', String(seed));
+  imageUrl.searchParams.set('nologo', 'true');
+  imageUrl.searchParams.set('negative', negativePrompt);
+
+  return imageUrl.toString();
+};
+
+const fetchArtworkAsDataUri = async (imageUrl) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const response = await fetch(imageUrl, { signal: controller.signal });
+
+    if (!response.ok) {
+      throw new Error(`Image provider returned ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    const imageBase64 = imageBuffer.toString('base64');
+
+    return `data:${contentType};base64,${imageBase64}`;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const generateStructuredMockAIDesign = async (input, compiledPrompt) => {
+  const category = inferCategoryFromInput(input);
+  const { estimatedTime, estimatedPrice, difficulty } = calculateComplexity(input);
+  const themeLabel = toTitleCase(input.theme || category);
+
+  const elements = [
+    `${input.style} composition aligned to ${input.bodyPlacement.toLowerCase()} flow`,
+    `Primary narrative based on: ${input.idea}`,
+    input.mustInclude.length > 0
+      ? `Must-have motifs: ${input.mustInclude.join(', ')}`
+      : 'Balanced focal point with supporting detail hierarchy',
+    input.avoid.length > 0
+      ? `Avoid motifs: ${input.avoid.join(', ')}`
+      : 'Avoid overcrowding to preserve readability over time'
+  ];
+
+  const tips = [
+    'Confirm stencil scale on skin before linework begins.',
+    'Use strong primary outlines in high-motion body areas.',
+    'Plan shading density to keep contrast clear after healing.'
+  ];
+
+  if (input.size === 'Large (8+ inches)' || input.size === 'Extra Large (12+ inches)') {
+    tips.push('Split into multiple sessions to protect skin quality and detail retention.');
+  }
+
+  const variations = [
+    `Create a high-contrast ${input.colors === 'Color' ? 'black-and-grey' : 'color-accent'} variant for versatility.`,
+    'Offer a minimal-line version focused on silhouette and core symbolism.',
+    'Add optional background texture only if it does not compete with the focal motif.'
+  ];
+
+  const tagCandidates = [
+    input.style,
+    themeLabel,
+    input.bodyPlacement,
+    category,
+    ...input.mustInclude
+  ];
+
+  const tags = [...new Set(tagCandidates.map(slugifyTag).filter(Boolean))].slice(0, 10);
+
+  const ideaSentence = input.idea.endsWith('.') ? input.idea : `${input.idea}.`;
+  const moodSentence = input.mood ? `The overall emotional tone should feel ${input.mood}.` : '';
+  const colorSentence = input.colorsInput
+    ? `Preferred color direction: ${input.colorsInput}.`
+    : 'Use a timeless black-and-grey priority unless artist recommends accents.';
+  const includeSentence = input.mustInclude.length > 0
+    ? `Must include elements: ${input.mustInclude.join(', ')}.`
+    : '';
+  const avoidSentence = input.avoid.length > 0
+    ? `Avoid these elements: ${input.avoid.join(', ')}.`
+    : '';
+
+  const description = [
+    `A ${input.style.toLowerCase()} ${themeLabel.toLowerCase()} tattoo artwork designed for ${input.bodyPlacement.toLowerCase()} placement.`,
+    ideaSentence,
+    moodSentence,
+    colorSentence,
+    includeSentence,
+    avoidSentence
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const artistFeasibility =
+    estimatedTime <= 3
+      ? 'High feasibility for a single session with normal skin prep.'
+      : estimatedTime <= 6
+        ? 'Moderate feasibility; confirm detail density and break plan before session.'
+        : 'Complex concept; likely requires multiple sessions and staged detailing.';
+
+  const artistNotes = input.additionalDetails
+    ? `Customer extra notes: ${input.additionalDetails}`
+    : 'Review line hierarchy, placement fit, and long-term readability during consultation.';
+
+  const artworkImageUrl = await generateArtworkImageUrl(input);
+  let resolvedImageUrl = artworkImageUrl;
+
+  try {
+    resolvedImageUrl = await fetchArtworkAsDataUri(artworkImageUrl);
+  } catch (imageError) {
+    console.warn('Falling back to external artwork URL:', imageError.message);
+  }
+
+  return {
+    title: `AI ${input.style} ${themeLabel} Artwork`,
+    description,
+    style: input.style,
+    category: AI_CATEGORY_OPTIONS.includes(category) ? category : 'Other',
+    size: input.size,
+    bodyPlacements: [input.bodyPlacement],
+    colors: input.colors,
+    colorPalette: input.colors,
+    placement: input.bodyPlacement,
+    estimatedTime,
+    estimatedPrice,
+    difficulty: AI_DIFFICULTY_OPTIONS.includes(difficulty) ? difficulty : 'Intermediate',
+    tags,
+    elements,
+    tips,
+    variations,
+    artistFeasibility,
+    artistNotes,
+    imageUrl: resolvedImageUrl,
+    prompt: compiledPrompt,
+    isAIGenerated: true
+  };
+};
+
 // @desc    Get all tattoo designs (public gallery)
 // @route   GET /api/tattoo-designs
 // @access  Public
@@ -169,12 +651,21 @@ const getDesignById = async (req, res) => {
   }
 };
 
-// @desc    Generate AI tattoo design (mock/rule-based)
+// @desc    Generate AI tattoo design (structured prompt pipeline)
 // @route   POST /api/tattoo-designs/ai-generate
 // @access  Public
 const generateAIDesign = async (req, res) => {
   try {
-    const { prompt, style, size, bodyPlacement } = req.body;
+    const prompt = normalizeString(req.body.prompt || req.body.idea || req.body.description);
+    const style = normalizeStyle(req.body.style);
+    const size = normalizeSize(req.body.size);
+    const bodyPlacement = normalizeBodyPlacement(req.body.bodyPlacement);
+    const theme = normalizeString(req.body.theme);
+    const colorsInput = normalizeString(req.body.colors);
+    const mood = normalizeString(req.body.mood);
+    const mustInclude = parseListInput(req.body.mustInclude || req.body.mustHaveElements);
+    const avoid = parseListInput(req.body.avoid || req.body.avoidElements);
+    const additionalDetails = normalizeString(req.body.additionalDetails || req.body.notes);
 
     // Validate input
     if (!prompt || prompt.trim().length < 5) {
@@ -184,20 +675,39 @@ const generateAIDesign = async (req, res) => {
       });
     }
 
-    // Mock AI generation logic (rule-based)
-    const generatedDesign = await generateMockAIDesign(prompt, style, size, bodyPlacement);
+    const generationInput = {
+      idea: prompt,
+      style,
+      size,
+      bodyPlacement,
+      theme,
+      colorsInput,
+      colors: normalizeColors(colorsInput),
+      mood,
+      mustInclude,
+      avoid,
+      additionalDetails
+    };
+
+    const compiledPrompt = buildStudioPrompt(generationInput);
+
+    // Structured mock generation logic
+    const generatedDesign = await generateStructuredMockAIDesign(generationInput, compiledPrompt);
 
     res.json({
       success: true,
       message: 'AI design generated successfully',
       data: {
         generatedDesign,
-        suggestions: [
-          'Consider adding more details to your design',
-          'Think about the placement and size carefully',
-          'Our artists can customize this design further',
-          'Schedule a consultation to discuss modifications'
-        ]
+        suggestions: buildSuggestionList(generationInput),
+        promptSummary: {
+          style,
+          size,
+          bodyPlacement,
+          theme: theme || 'Custom',
+          hasMustInclude: mustInclude.length > 0,
+          hasAvoidList: avoid.length > 0
+        }
       }
     });
 
@@ -208,142 +718,6 @@ const generateAIDesign = async (req, res) => {
       message: 'Server error while generating design'
     });
   }
-};
-
-// Mock AI design generation function (student-friendly)
-const generateMockAIDesign = async (prompt, style = 'Traditional', size = 'Medium', bodyPlacement = 'Arm') => {
-  const promptLower = prompt.toLowerCase();
-  
-  // Rule-based generation based on keywords
-  let generatedDescription = '';
-  let category = 'Other';
-  let colors = 'Black & Grey';
-  let estimatedTime = 2;
-  let estimatedPrice = 200;
-  let difficulty = 'Intermediate';
-  let tags = [];
-
-  // Animal keywords
-  if (/(lion|tiger|wolf|eagle|bird|cat|dog|dragon|snake|butterfly|bee|spider)/.test(promptLower)) {
-    category = 'Animals';
-    tags.push('animal');
-    
-    if (/lion/.test(promptLower)) {
-      generatedDescription = `A majestic lion design in ${style} style. Features powerful mane details with strong geometric patterns. Perfect for ${bodyPlacement.toLowerCase()} placement, showing strength and courage.`;
-      tags.push('strength', 'power', 'majestic');
-    } else if (/(wolf|wolves)/.test(promptLower)) {
-      generatedDescription = `A fierce wolf design with intricate details in ${style} style. Howling moon silhouette in background. Symbolizes loyalty and independence, ideal for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('loyalty', 'wild', 'moon');
-    } else if (/(dragon|dragons)/.test(promptLower)) {
-      generatedDescription = `An elegant dragon design with flowing curves in ${style} style. Eastern-inspired with cloud elements. Represents wisdom and power, perfectly sized for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('wisdom', 'power', 'eastern');
-      colors = 'Color';
-      estimatedTime = 4;
-      estimatedPrice = 400;
-      difficulty = 'Advanced';
-    } else if (/(butterfly|butterflies)/.test(promptLower)) {
-      generatedDescription = `Delicate butterfly design with detailed wing patterns in ${style} style. Gradient shading and fine linework. Perfect feminine touch for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('delicate', 'feminine', 'transformation');
-      colors = 'Color';
-    } else {
-      generatedDescription = `Beautiful animal-inspired design in ${style} style, incorporating natural elements and flowing lines. Thoughtfully crafted for ${bodyPlacement.toLowerCase()} placement.`;
-      tags.push('nature');
-    }
-  }
-  // Nature keywords
-  else if (/(flower|rose|tree|mountain|ocean|sun|moon|star|forest|leaf|vine)/.test(promptLower)) {
-    category = 'Nature';
-    tags.push('nature');
-    
-    if (/(rose|roses)/.test(promptLower)) {
-      generatedDescription = `Classic rose design with thorny stem in ${style} style. Detailed petals with realistic shading. Timeless symbol of love and beauty for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('love', 'beauty', 'classic');
-      colors = 'Color';
-    } else if (/(tree|trees)/.test(promptLower)) {
-      generatedDescription = `Majestic tree design with intricate root system in ${style} style. Represents growth and stability. Branches perfectly frame the ${bodyPlacement.toLowerCase()}.`;
-      tags.push('growth', 'stability', 'roots');
-    } else if (/(mountain|mountains)/.test(promptLower)) {
-      generatedDescription = `Mountain landscape with geometric elements in ${style} style. Clean lines and bold shapes. Adventure and journey theme perfect for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('adventure', 'journey', 'geometric');
-    } else {
-      generatedDescription = `Nature-inspired design combining organic elements in ${style} style. Flowing composition that complements the natural curves of ${bodyPlacement.toLowerCase()}.`;
-      tags.push('organic');
-    }
-  }
-  // Geometric/Abstract keywords
-  else if (/(geometric|mandala|triangle|circle|pattern|abstract|sacred geometry)/.test(promptLower)) {
-    category = 'Geometric';
-    tags.push('geometric');
-    
-    if (/(mandala|mandalas)/.test(promptLower)) {
-      generatedDescription = `Intricate mandala design with symmetrical patterns in ${style} style. Sacred geometry with repeating motifs. Centered composition perfect for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('sacred', 'symmetrical', 'meditation');
-      difficulty = 'Advanced';
-      estimatedTime = 5;
-      estimatedPrice = 450;
-    } else if (/(triangle|triangles)/.test(promptLower)) {
-      generatedDescription = `Modern triangle composition in ${style} style. Clean geometric forms with dotwork details. Minimalist approach ideal for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('modern', 'minimalist', 'dotwork');
-    } else {
-      generatedDescription = `Abstract geometric design with flowing patterns in ${style} style. Mathematical precision meets artistic expression for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('abstract', 'precision');
-    }
-  }
-  // Text/Quote keywords
-  else if (/(quote|text|word|letter|script|writing|name)/.test(promptLower)) {
-    category = 'Text/Quotes';
-    tags.push('text', 'personal');
-    generatedDescription = `Custom lettering design in ${style} style script. Elegant font with decorative elements. Personal meaningful text perfectly sized for ${bodyPlacement.toLowerCase()}.`;
-    estimatedTime = 1.5;
-    estimatedPrice = 150;
-    difficulty = 'Beginner';
-  }
-  // Symbol keywords
-  else if (/(symbol|cross|heart|infinity|anchor|compass|arrow|feather)/.test(promptLower)) {
-    category = 'Symbols';
-    tags.push('symbol', 'meaning');
-    
-    if (/(heart|hearts)/.test(promptLower)) {
-      generatedDescription = `Stylized heart design with decorative elements in ${style} style. Symbol of love with intricate detailing. Perfectly proportioned for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('love', 'emotion');
-    } else if (/(compass|compasses)/.test(promptLower)) {
-      generatedDescription = `Vintage compass design with navigation elements in ${style} style. Direction and guidance symbolism. Adventure theme ideal for ${bodyPlacement.toLowerCase()}.`;
-      tags.push('guidance', 'adventure', 'vintage');
-    } else {
-      generatedDescription = `Meaningful symbol design in ${style} style with personal significance. Clean execution with thoughtful placement for ${bodyPlacement.toLowerCase()}.`;
-    }
-  }
-  // Default fallback
-  else {
-    generatedDescription = `Custom design inspired by "${prompt}" in ${style} style. Unique artistic interpretation with personalized elements. Carefully crafted composition for ${bodyPlacement.toLowerCase()} placement.`;
-  }
-
-  // Adjust based on size
-  if (size === 'Small (2-4 inches)') {
-    estimatedTime = Math.max(1, estimatedTime - 1);
-    estimatedPrice = Math.max(80, estimatedPrice - 100);
-  } else if (size === 'Large (8+ inches)') {
-    estimatedTime += 2;
-    estimatedPrice += 200;
-    difficulty = difficulty === 'Beginner' ? 'Intermediate' : 'Advanced';
-  }
-
-  return {
-    title: `AI Generated: ${prompt}`,
-    description: generatedDescription,
-    style,
-    category,
-    size,
-    bodyPlacements: [bodyPlacement],
-    colors,
-    estimatedTime,
-    estimatedPrice,
-    difficulty,
-    tags,
-    imageUrl: '/uploads/designs/ai-generated-placeholder.jpg',
-    prompt: prompt,
-    isAIGenerated: true
-  };
 };
 
 // @desc    Like/Unlike a design

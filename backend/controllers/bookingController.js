@@ -1,4 +1,25 @@
-const { Booking, User } = require('../models');
+const mongoose = require('mongoose');
+const { Booking, TattooDesign } = require('../models');
+
+const BOOKING_POPULATE_OPTIONS = [
+  { path: 'userId', select: 'name email phone' },
+  {
+    path: 'tattooDesignId',
+    select: 'title description style size imageUrl aiGenerated prompt createdAt'
+  }
+];
+
+const getLinkedUserDesign = async (tattooDesignId, userId) => {
+  if (!mongoose.Types.ObjectId.isValid(tattooDesignId)) {
+    return null;
+  }
+
+  return TattooDesign.findOne({
+    _id: tattooDesignId,
+    createdBy: userId,
+    isActive: true
+  }).select('_id title description style size imageUrl aiGenerated prompt createdAt');
+};
 
 // @desc    Create a new booking
 // @route   POST /api/bookings
@@ -12,7 +33,8 @@ const createBooking = async (req, res) => {
       size,
       preferredDate,
       preferredTime,
-      notes
+      notes,
+      tattooDesignId
     } = req.body;
 
     // Validate required fields
@@ -49,6 +71,18 @@ const createBooking = async (req, res) => {
       });
     }
 
+    let linkedDesign = null;
+    if (tattooDesignId !== undefined && tattooDesignId !== null && tattooDesignId !== '') {
+      linkedDesign = await getLinkedUserDesign(tattooDesignId, req.user.userId);
+
+      if (!linkedDesign) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected design was not found in your saved designs'
+        });
+      }
+    }
+
     // Create booking
     const booking = new Booking({
       userId: req.user.userId,
@@ -59,13 +93,14 @@ const createBooking = async (req, res) => {
       preferredDate: bookingDate,
       preferredTime,
       notes: notes || '',
+      tattooDesignId: linkedDesign ? linkedDesign._id : undefined,
       status: 'pending'
     });
 
     await booking.save();
 
     // Populate user info for response
-    await booking.populate('userId', 'name email phone');
+    await booking.populate(BOOKING_POPULATE_OPTIONS);
 
     res.status(201).json({
       success: true,
@@ -109,7 +144,7 @@ const getUserBookings = async (req, res) => {
     }
 
     const bookings = await Booking.find(filter)
-      .populate('userId', 'name email phone')
+      .populate(BOOKING_POPULATE_OPTIONS)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -148,7 +183,7 @@ const getBookingById = async (req, res) => {
     const booking = await Booking.findOne({
       _id: req.params.id,
       userId: req.user.userId
-    }).populate('userId', 'name email phone');
+    }).populate(BOOKING_POPULATE_OPTIONS);
 
     if (!booking) {
       return res.status(404).json({
@@ -205,7 +240,8 @@ const updateBooking = async (req, res) => {
       size,
       preferredDate,
       preferredTime,
-      notes
+      notes,
+      tattooDesignId
     } = req.body;
 
     // Update fields if provided
@@ -214,6 +250,23 @@ const updateBooking = async (req, res) => {
     if (bodyPlacement !== undefined) booking.bodyPlacement = bodyPlacement;
     if (size !== undefined) booking.size = size;
     if (notes !== undefined) booking.notes = notes;
+
+    if (tattooDesignId !== undefined) {
+      if (tattooDesignId === null || tattooDesignId === '') {
+        booking.tattooDesignId = undefined;
+      } else {
+        const linkedDesign = await getLinkedUserDesign(tattooDesignId, req.user.userId);
+
+        if (!linkedDesign) {
+          return res.status(400).json({
+            success: false,
+            message: 'Selected design was not found in your saved designs'
+          });
+        }
+
+        booking.tattooDesignId = linkedDesign._id;
+      }
+    }
     
     // Check for date/time changes and validate against double booking
     const dateChanged = preferredDate !== undefined;
@@ -252,7 +305,7 @@ const updateBooking = async (req, res) => {
     }
 
     await booking.save();
-    await booking.populate('userId', 'name email phone');
+    await booking.populate(BOOKING_POPULATE_OPTIONS);
 
     res.json({
       success: true,
@@ -347,7 +400,7 @@ const getAllBookings = async (req, res) => {
     sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const bookings = await Booking.find(filter)
-      .populate('userId', 'name email phone')
+      .populate(BOOKING_POPULATE_OPTIONS)
       .sort(sortObj)
       .skip(skip)
       .limit(parseInt(limit));
@@ -401,7 +454,7 @@ const updateBookingStatus = async (req, res) => {
   try {
     const { status, adminNotes, estimatedDuration, estimatedPrice, rejectionReason } = req.body;
 
-    const booking = await Booking.findById(req.params.id).populate('userId', 'name email phone');
+    const booking = await Booking.findById(req.params.id).populate(BOOKING_POPULATE_OPTIONS);
 
     if (!booking) {
       return res.status(404).json({

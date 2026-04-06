@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { useApi } from '../hooks/useApi';
 import { useForm } from '../hooks/useForm';
-import { bookingService } from '../services/api';
+import { bookingService, tattooDesignService } from '../services/api';
 import { formatDate, addDays } from '../utils/helpers';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import Textarea from '../components/UI/Textarea';
 import Select from '../components/UI/Select';
 import Alert from '../components/UI/Alert';
@@ -21,11 +19,15 @@ const Booking = () => {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [bookingId, setBookingId] = useState(null);
+  const [linkedDesign, setLinkedDesign] = useState(null);
+  const [isLoadingLinkedDesign, setIsLoadingLinkedDesign] = useState(false);
   
   const { user, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const linkedDesignId = new URLSearchParams(location.search).get('designId');
   
   const clearError = () => setError(null);
 
@@ -69,6 +71,22 @@ const Booking = () => {
     { value: 'full_sleeve', label: 'Full Sleeve' },
     { value: 'half_sleeve', label: 'Half Sleeve' }
   ];
+
+  const mapDesignSizeToBookingSize = (designSize) => {
+    const sizeMap = {
+      'Small (2-4 inches)': 'small',
+      'Medium (4-8 inches)': 'medium',
+      'Large (8+ inches)': 'large',
+      'Extra Large (12+ inches)': 'large'
+    };
+
+    return sizeMap[designSize] || '';
+  };
+
+  const normalizePlacement = (placement) => {
+    const validPlacement = bodyPlacements.find((option) => option.value === placement);
+    return validPlacement ? validPlacement.value : 'Other';
+  };
 
   const validationRules = {
     tattooStyle: [(value) => !value ? 'Please select a tattoo style' : ''],
@@ -162,6 +180,58 @@ const Booking = () => {
     }
   }, [selectedDate]);
 
+  useEffect(() => {
+    const loadLinkedDesign = async () => {
+      if (!isAuthenticated || !linkedDesignId) {
+        setLinkedDesign(null);
+        return;
+      }
+
+      setIsLoadingLinkedDesign(true);
+
+      try {
+        const response = await tattooDesignService.getUserDesigns();
+        const userDesigns = response?.data?.data || [];
+        const matchedDesign = userDesigns.find((design) => design._id === linkedDesignId);
+
+        if (!matchedDesign) {
+          setError('Selected design was not found in your saved designs. You can still continue booking without it.');
+          setLinkedDesign(null);
+          return;
+        }
+
+        setLinkedDesign(matchedDesign);
+
+        if (!values.tattooStyle && matchedDesign.style) {
+          handleChange('tattooStyle', matchedDesign.style);
+        }
+
+        if (!values.description && matchedDesign.description) {
+          handleChange('description', matchedDesign.description);
+        }
+
+        if (!values.size && matchedDesign.size) {
+          const mappedSize = mapDesignSizeToBookingSize(matchedDesign.size);
+          if (mappedSize) {
+            handleChange('size', mappedSize);
+          }
+        }
+
+        if (!values.placement && matchedDesign.bodyPlacements?.[0]) {
+          handleChange('placement', normalizePlacement(matchedDesign.bodyPlacements[0]));
+        }
+      } catch (loadError) {
+        console.error('Failed to load linked design:', loadError);
+        setError('Failed to load selected design. You can still continue booking without it.');
+      } finally {
+        setIsLoadingLinkedDesign(false);
+      }
+    };
+
+    loadLinkedDesign();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, linkedDesignId]);
+
   const handleNextStep = () => {
     if (step === 1) {
       if (!validateAll()) {
@@ -192,6 +262,7 @@ const Booking = () => {
       size: getSizeLabel(values.size), // Convert to backend enum format
       preferredDate: selectedDate,
       preferredTime: getTimeSlot(selectedTime), // Convert to backend enum format
+      tattooDesignId: linkedDesign?._id,
       notes: values.specialRequests || ''
     };
 
@@ -362,6 +433,20 @@ const Booking = () => {
           {step === 1 && (
             <div className="card">
               <h2 className="text-2xl font-bold text-secondary-900 mb-6">Tell Us About Your Tattoo</h2>
+
+              {isLoadingLinkedDesign && (
+                <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <p className="text-sm text-blue-800">Loading your selected AI design...</p>
+                </div>
+              )}
+
+              {linkedDesign && (
+                <div className="mb-6 rounded-lg border border-primary-200 bg-primary-50 p-4">
+                  <p className="text-sm font-semibold text-primary-900">AI design linked to this booking</p>
+                  <p className="mt-1 text-sm text-primary-800">{linkedDesign.title}</p>
+                  <p className="mt-1 text-xs text-primary-700 line-clamp-2">{linkedDesign.description}</p>
+                </div>
+              )}
               
               <form className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -618,6 +703,16 @@ const Booking = () => {
                     </div>
                   )}
                 </div>
+
+                {linkedDesign && (
+                  <div>
+                    <h3 className="font-semibold text-secondary-900 mb-3">Linked AI Design</h3>
+                    <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                      <p className="text-sm font-medium text-primary-900">{linkedDesign.title}</p>
+                      <p className="mt-1 text-sm text-primary-700 line-clamp-3">{linkedDesign.description}</p>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Appointment Details */}
                 <div>

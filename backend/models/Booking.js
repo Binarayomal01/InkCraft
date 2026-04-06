@@ -75,6 +75,10 @@ const bookingSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected', 'completed', 'cancelled'],
     default: 'pending'
   },
+  tattooDesignId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TattooDesign'
+  },
   estimatedDuration: {
     type: Number, // in hours
     min: 1,
@@ -117,6 +121,7 @@ const bookingSchema = new mongoose.Schema({
 bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ preferredDate: 1 });
 bookingSchema.index({ createdAt: -1 });
+bookingSchema.index({ tattooDesignId: 1 });
 // Compound index to efficiently check for double bookings
 bookingSchema.index({ preferredDate: 1, preferredTime: 1, status: 1 });
 

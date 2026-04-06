@@ -160,6 +160,22 @@ const BookingManagement = () => {
     });
   };
 
+  const resolveDesignImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    if (imageUrl.startsWith('data:image') || imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+
+    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const serverBase = apiBase.replace(/\/api\/?$/, '');
+
+    if (imageUrl.startsWith('/')) {
+      return `${serverBase}${imageUrl}`;
+    }
+
+    return `${serverBase}/${imageUrl}`;
+  };
+
   const handleBookingClick = (booking) => {
     setSelectedBooking(booking);
     setNewStatus(booking.status);
@@ -194,6 +210,11 @@ const BookingManagement = () => {
     setSelectedBooking(null);
     setNewStatus('');
   };
+
+  const selectedLinkedDesign =
+    selectedBooking?.tattooDesignId && typeof selectedBooking.tattooDesignId === 'object'
+      ? selectedBooking.tattooDesignId
+      : null;
 
   return (
     <div className="space-y-6">
@@ -247,7 +268,7 @@ const BookingManagement = () => {
           </div>
         ) : filteredBookings.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y ${isDark ? 'divide-dark-700' : 'divide-gray-200'}">
+            <table className={`min-w-full divide-y ${isDark ? 'divide-dark-700' : 'divide-gray-200'}`}>
               <thead className={isDark ? 'bg-dark-800' : 'bg-gray-50'}>
                 <tr>
                   <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDark ? 'text-gold-400' : 'text-gray-500'}`}>
@@ -268,58 +289,70 @@ const BookingManagement = () => {
                 </tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'bg-dark-900 divide-dark-700' : 'bg-white divide-gray-200'}`}>
-                {filteredBookings.map((booking) => (
-                  <tr
-                    key={booking._id}
-                    className={`cursor-pointer ${isDark ? 'hover:bg-dark-800' : 'hover:bg-gray-50'}`}
-                    onClick={() => handleBookingClick(booking)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {booking.userId?.name || 'Unknown'}
+                {filteredBookings.map((booking) => {
+                  const linkedDesign =
+                    booking?.tattooDesignId && typeof booking.tattooDesignId === 'object'
+                      ? booking.tattooDesignId
+                      : null;
+
+                  return (
+                    <tr
+                      key={booking._id}
+                      className={`cursor-pointer ${isDark ? 'hover:bg-dark-800' : 'hover:bg-gray-50'}`}
+                      onClick={() => handleBookingClick(booking)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {booking.userId?.name || 'Unknown'}
+                          </div>
+                          <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                            {booking.userId?.email || 'No email'}
+                          </div>
+                          <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                            {booking.userId?.phone || 'No phone'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <div className={`text-sm font-medium capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {booking.tattooStyle} ({booking.size})
+                          </div>
+                          <div className={`text-sm capitalize ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                            {booking.bodyPlacement || booking.placement}
+                          </div>
+                          <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                            {booking.estimatedPrice ? `$${booking.estimatedPrice}` : booking.budget || 'N/A'}
+                          </div>
+                          {linkedDesign && (
+                            <div className={`mt-1 text-xs font-medium ${isDark ? 'text-neon-400' : 'text-blue-600'}`}>
+                              Linked AI design
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {formatDate(booking.preferredDate)}
                         </div>
                         <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                          {booking.userId?.email || 'No email'}
+                          {formatTime(booking.preferredTime)}
                         </div>
-                        <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                          {booking.userId?.phone || 'No phone'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className={`text-sm font-medium capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                          {booking.tattooStyle} ({booking.size})
-                        </div>
-                        <div className={`text-sm capitalize ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                          {booking.bodyPlacement || booking.placement}
-                        </div>
-                        <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                          {booking.estimatedPrice ? `$${booking.estimatedPrice}` : booking.budget || 'N/A'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {formatDate(booking.preferredDate)}
-                      </div>
-                      <div className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                        {formatTime(booking.preferredTime)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                        getStatusColor(booking.status)
-                      }`}>
-                        {booking.status}
-                      </span>
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-                      {formatDate(booking.createdAt)}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                          getStatusColor(booking.status)
+                        }`}>
+                          {booking.status}
+                        </span>
+                      </td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                        {formatDate(booking.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -400,6 +433,39 @@ const BookingManagement = () => {
                 </div>
               )}
             </div>
+
+            {selectedLinkedDesign && (
+              <div className={`rounded-lg p-4 ${isDark ? 'bg-dark-800 border border-neon-500/30' : 'bg-blue-50 border border-blue-200'}`}>
+                <h3 className={`text-lg font-medium mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Linked AI Design</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-gold-400' : 'text-gray-700'}`}>Title</p>
+                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{selectedLinkedDesign.title || 'Untitled design'}</p>
+                  </div>
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-gold-400' : 'text-gray-700'}`}>Style</p>
+                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{selectedLinkedDesign.style || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-gold-400' : 'text-gray-700'}`}>Description</p>
+                    <p className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{selectedLinkedDesign.description || 'No description available'}</p>
+                  </div>
+                  {selectedLinkedDesign.imageUrl && (
+                    <div>
+                      <p className={`text-sm font-medium mb-2 ${isDark ? 'text-gold-400' : 'text-gray-700'}`}>Preview</p>
+                      <img
+                        src={resolveDesignImageUrl(selectedLinkedDesign.imageUrl)}
+                        alt={selectedLinkedDesign.title || 'Linked tattoo design'}
+                        className="max-h-56 w-full rounded-lg border border-gray-300 object-contain bg-white"
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Appointment Info */}
             <div className={`rounded-lg p-4 ${isDark ? 'bg-dark-800' : 'bg-blue-50'}`}>

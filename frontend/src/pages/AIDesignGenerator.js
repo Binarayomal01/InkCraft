@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useTheme } from '../context/ThemeContext';
 import { useForm } from '../hooks/useForm';
@@ -13,10 +14,13 @@ import LoadingSpinner from '../components/UI/LoadingSpinner';
 const AIDesignGenerator = () => {
   const { isDark } = useTheme();
   const [generatedDesign, setGeneratedDesign] = useState(null);
+  const [savedDesignId, setSavedDesignId] = useState(null);
+  const [previewImageFailed, setPreviewImageFailed] = useState(false);
   const [designHistory, setDesignHistory] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   
   const { loading, error, request, clearError } = useApi();
+  const navigate = useNavigate();
 
   const styles = [
     { value: 'traditional', label: 'Traditional' },
@@ -48,16 +52,35 @@ const AIDesignGenerator = () => {
     { value: 'large', label: 'Large (8+ inches)' }
   ];
 
+  const bodyPlacements = [
+    { value: 'arm', label: 'Arm' },
+    { value: 'leg', label: 'Leg' },
+    { value: 'back', label: 'Back' },
+    { value: 'chest', label: 'Chest' },
+    { value: 'shoulder', label: 'Shoulder' },
+    { value: 'wrist', label: 'Wrist' },
+    { value: 'ankle', label: 'Ankle' },
+    { value: 'neck', label: 'Neck' },
+    { value: 'hand', label: 'Hand' },
+    { value: 'ribcage', label: 'Ribcage' },
+    { value: 'hip', label: 'Hip' },
+    { value: 'foot', label: 'Foot' },
+    { value: 'other', label: 'Other' }
+  ];
+
   const validationRules = {
     style: [(value) => !value ? 'Please select a style' : ''],
     theme: [(value) => !value ? 'Please select a theme' : ''],
     size: [(value) => !value ? 'Please select a size' : ''],
+    bodyPlacement: [(value) => !value ? 'Please select a body placement' : ''],
     description: [
       (value) => !value ? 'Please describe your design idea' : '',
       (value) => value && value.length < 5 ? 'Description must be at least 5 characters' : ''
     ],
     colors: [],
-    mood: []
+    mood: [],
+    mustInclude: [],
+    avoid: []
   };
 
   const {
@@ -67,19 +90,89 @@ const AIDesignGenerator = () => {
     isValid,
     handleChange,
     handleBlur,
-    validateAll,
-    resetForm
+    validateAll
   } = useForm(
     {
       style: '',
       theme: '',
       size: '',
+      bodyPlacement: '',
       description: '',
       colors: '',
-      mood: ''
+      mood: '',
+      mustInclude: '',
+      avoid: ''
     },
     validationRules
   );
+
+  const normalizeStyle = (styleValue) => {
+    const styleMap = {
+      traditional: 'Traditional',
+      realism: 'Realistic',
+      tribal: 'Tribal',
+      geometric: 'Geometric',
+      watercolor: 'Watercolor',
+      minimalist: 'Minimalist',
+      blackwork: 'Blackwork',
+      japanese: 'Japanese',
+      biomechanical: 'Biomechanical',
+      dotwork: 'Blackwork'
+    };
+
+    return styleMap[styleValue] || 'Other';
+  };
+
+  const normalizeSize = (sizeValue) => {
+    const sizeMap = {
+      small: 'Small (2-4 inches)',
+      medium: 'Medium (4-8 inches)',
+      large: 'Large (8+ inches)'
+    };
+
+    return sizeMap[sizeValue] || 'Medium (4-8 inches)';
+  };
+
+  const normalizeBodyPlacement = (placementValue) => {
+    const placementMap = {
+      arm: 'Arm',
+      leg: 'Leg',
+      back: 'Back',
+      chest: 'Chest',
+      shoulder: 'Shoulder',
+      wrist: 'Wrist',
+      ankle: 'Ankle',
+      neck: 'Neck',
+      hand: 'Hand',
+      ribcage: 'Ribcage',
+      hip: 'Hip',
+      foot: 'Foot',
+      other: 'Other'
+    };
+
+    return placementMap[placementValue] || 'Arm';
+  };
+
+  const resolveDesignImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+
+    if (
+      imageUrl.startsWith('data:image') ||
+      imageUrl.startsWith('http://') ||
+      imageUrl.startsWith('https://')
+    ) {
+      return imageUrl;
+    }
+
+    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const serverBase = apiBase.replace(/\/api\/?$/, '');
+
+    if (imageUrl.startsWith('/')) {
+      return `${serverBase}${imageUrl}`;
+    }
+
+    return `${serverBase}/${imageUrl}`;
+  };
 
   // Mock AI design generation function
   const generateMockDesign = (formData) => {
@@ -89,12 +182,12 @@ const AIDesignGenerator = () => {
         description: `A beautiful ${formData.style} style tattoo featuring ${formData.theme} elements. ${formData.description}`,
         elements: [
           'Central focal point with intricate details',
-          'Complementary background elements',
+          formData.mustInclude ? `Must include: ${formData.mustInclude}` : 'Complementary background elements',
           'Flowing lines and balanced composition',
-          'Symbolic meaning integration'
+          formData.avoid ? `Avoid: ${formData.avoid}` : 'Symbolic meaning integration'
         ],
         colorPalette: formData.colors || 'Black and grey with accent colors',
-        placement: 'Recommended for arm, back, or leg placement',
+        placement: normalizeBodyPlacement(formData.bodyPlacement),
         estimatedTime: '2-4 hours',
         difficulty: 'Medium',
         tips: [
@@ -119,33 +212,39 @@ const AIDesignGenerator = () => {
     }
 
     setIsGenerating(true);
+    setSavedDesignId(null);
+    setPreviewImageFailed(false);
     clearError();
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       // Try to call real API first, fallback to mock
       try {
         const response = await request(() => 
           tattooDesignService.generateAI({
-            style: values.style,
+            idea: values.description,
+            prompt: values.description,
+            style: normalizeStyle(values.style),
             theme: values.theme,
-            size: values.size,
-            description: values.description,
+            size: normalizeSize(values.size),
+            bodyPlacement: normalizeBodyPlacement(values.bodyPlacement),
             colors: values.colors,
-            mood: values.mood
+            mood: values.mood,
+            mustInclude: values.mustInclude,
+            avoid: values.avoid
           })
         );
         
-        if (response?.data) {
-          setGeneratedDesign(response.data);
+        const apiGeneratedDesign = response?.data?.data?.generatedDesign;
+        if (response?.success && apiGeneratedDesign) {
+          setPreviewImageFailed(false);
+          setGeneratedDesign(apiGeneratedDesign);
         } else {
           throw new Error('No design returned from API');
         }
       } catch (apiError) {
         console.log('API call failed, using mock design generation');
         const mockDesign = generateMockDesign(values);
+        setPreviewImageFailed(false);
         setGeneratedDesign(mockDesign);
       }
       
@@ -163,38 +262,78 @@ const AIDesignGenerator = () => {
     }
   };
 
-  const handleSaveDesign = async () => {
-    if (!generatedDesign) return;
+  const saveGeneratedDesign = async ({ showSuccessAlert = true } = {}) => {
+    if (!generatedDesign) return null;
     
     try {
       const designData = {
         title: generatedDesign.title,
         description: generatedDesign.description,
-        style: values.style,
+        style: normalizeStyle(values.style),
+        size: normalizeSize(values.size),
+        bodyPlacements: [normalizeBodyPlacement(values.bodyPlacement)],
+        imageUrl: generatedDesign.imageUrl,
         aiGenerated: true,
-        prompt: values.description,
+        prompt: generatedDesign.prompt || values.description,
         parameters: {
           theme: values.theme,
+          bodyPlacement: normalizeBodyPlacement(values.bodyPlacement),
           size: values.size,
           colors: values.colors,
-          mood: values.mood
+          mood: values.mood,
+          mustInclude: values.mustInclude,
+          avoid: values.avoid
         }
       };
       
-      await request(() => tattooDesignService.create(designData));
-      
-      // Show success message
-      alert('Design saved to your collection!');
+      const result = await request(() => tattooDesignService.create(designData));
+
+      if (!result?.success) {
+        throw new Error(result?.error?.message || 'Failed to save design. Please try again.');
+      }
+
+      const newDesignId = result?.data?.data?.design?._id || null;
+      if (newDesignId) {
+        setSavedDesignId(newDesignId);
+      }
+
+      if (showSuccessAlert) {
+        alert('Design saved to your collection!');
+      }
+
+      return newDesignId;
     } catch (err) {
       console.error('Save design error:', err);
-      
-      // Check for duplicate error (409 conflict)
-      if (err.response?.status === 409) {
-        alert('You have already saved this design to your collection!');
-      } else {
-        alert(err.response?.data?.message || 'Failed to save design. Please try again.');
+
+      if (showSuccessAlert) {
+        alert(err.message || 'Failed to save design. Please try again.');
       }
+
+      return null;
     }
+  };
+
+  const handleSaveDesign = async () => {
+    await saveGeneratedDesign({ showSuccessAlert: true });
+  };
+
+  const handleBookWithDesign = async () => {
+    if (!generatedDesign) {
+      return;
+    }
+
+    let designId = savedDesignId;
+
+    if (!designId) {
+      designId = await saveGeneratedDesign({ showSuccessAlert: false });
+    }
+
+    if (!designId) {
+      alert('Please save the design first so your artist can review it during booking.');
+      return;
+    }
+
+    navigate(`/book?designId=${designId}`);
   };
 
   const handleLoadFromHistory = (historyItem) => {
@@ -203,6 +342,8 @@ const AIDesignGenerator = () => {
         handleChange(key, historyItem[key]);
       }
     });
+    setSavedDesignId(null);
+    setPreviewImageFailed(false);
     setGeneratedDesign(null);
   };
 
@@ -269,16 +410,29 @@ const AIDesignGenerator = () => {
                     />
                   </div>
                   
-                  <Select
-                    label="Size"
-                    value={values.size}
-                    onChange={(e) => handleChange('size', e.target.value)}
-                    onBlur={() => handleBlur('size')}
-                    error={touched.size ? errors.size : ''}
-                    options={sizes}
-                    placeholder="Choose size"
-                    required
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <Select
+                      label="Size"
+                      value={values.size}
+                      onChange={(e) => handleChange('size', e.target.value)}
+                      onBlur={() => handleBlur('size')}
+                      error={touched.size ? errors.size : ''}
+                      options={sizes}
+                      placeholder="Choose size"
+                      required
+                    />
+
+                    <Select
+                      label="Body Placement"
+                      value={values.bodyPlacement}
+                      onChange={(e) => handleChange('bodyPlacement', e.target.value)}
+                      onBlur={() => handleBlur('bodyPlacement')}
+                      error={touched.bodyPlacement ? errors.bodyPlacement : ''}
+                      options={bodyPlacements}
+                      placeholder="Choose placement"
+                      required
+                    />
+                  </div>
                   
                   <Textarea
                     label="Design Description"
@@ -303,6 +457,20 @@ const AIDesignGenerator = () => {
                     placeholder="e.g., Bold and powerful, Elegant and subtle, Mystical and spiritual..."
                     value={values.mood}
                     onChange={(e) => handleChange('mood', e.target.value)}
+                  />
+
+                  <Input
+                    label="Must Include Elements"
+                    placeholder="e.g., lotus, moon, compass (comma separated)"
+                    value={values.mustInclude}
+                    onChange={(e) => handleChange('mustInclude', e.target.value)}
+                  />
+
+                  <Input
+                    label="Elements to Avoid"
+                    placeholder="e.g., skulls, text, heavy background (comma separated)"
+                    value={values.avoid}
+                    onChange={(e) => handleChange('avoid', e.target.value)}
                   />
                   
                   <Button
@@ -362,6 +530,11 @@ const AIDesignGenerator = () => {
                 </div>
               ) : generatedDesign ? (
                 <div className={`card ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+                  {(() => {
+                    const designPreviewUrl = resolveDesignImageUrl(generatedDesign.imageUrl);
+
+                    return (
+                      <>
                   <div className="flex justify-between items-start mb-6">
                     <h2 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                       {generatedDesign.title}
@@ -371,22 +544,34 @@ const AIDesignGenerator = () => {
                       size="small"
                       onClick={handleSaveDesign}
                       loading={loading}
+                      disabled={loading || !!savedDesignId}
                     >
-                      Save Design
+                      {savedDesignId ? 'Design Saved' : 'Save Design'}
                     </Button>
                   </div>
                   
                   {/* Design Preview */}
-                  <div className="aspect-video bg-gradient-to-br from-accent-100 to-primary-100 rounded-lg mb-6 flex items-center justify-center">
-                    <div className="text-center">
-                      <svg className="w-24 h-24 text-accent-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      <p className="text-accent-600 font-medium">
-                        AI-Generated Design Preview
-                      </p>
+                  {designPreviewUrl && !previewImageFailed ? (
+                    <div className="aspect-video bg-gradient-to-br from-accent-100 to-primary-100 rounded-lg mb-6 overflow-hidden border border-accent-200/40">
+                      <img
+                        src={designPreviewUrl}
+                        alt={generatedDesign.title || 'AI generated tattoo design preview'}
+                        className="h-full w-full object-contain"
+                        onError={() => setPreviewImageFailed(true)}
+                      />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="aspect-video bg-gradient-to-br from-accent-100 to-primary-100 rounded-lg mb-6 flex items-center justify-center">
+                      <div className="text-center">
+                        <svg className="w-24 h-24 text-accent-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <p className="text-accent-600 font-medium">
+                          AI-Generated Design Preview
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="space-y-6">
                     {/* Description */}
@@ -461,10 +646,12 @@ const AIDesignGenerator = () => {
                     <div className={`flex flex-col sm:flex-row gap-3 pt-4 ${isDark ? 'border-t border-dark-700' : 'border-t border-gray-200'}`}>
                       <Button
                         variant="primary"
-                        onClick={() => window.open('/book', '_blank')}
+                        onClick={handleBookWithDesign}
+                        loading={loading}
+                        disabled={loading}
                         className="flex-1"
                       >
-                        Book Consultation
+                        {savedDesignId ? 'Book With This Design' : 'Save & Book Consultation'}
                       </Button>
                       
                       <Button
@@ -477,6 +664,9 @@ const AIDesignGenerator = () => {
                       </Button>
                     </div>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className={`card text-center py-16 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
