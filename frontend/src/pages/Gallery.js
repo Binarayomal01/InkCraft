@@ -37,104 +37,28 @@ const Gallery = () => {
     { value: 'Abstract', label: 'Abstract' }
   ];
 
-  // Sample designs for demonstration (updated to match backend format)
-  const sampleDesigns = [
-    {
-      _id: '1',
-      title: 'Rose Realistic',
-      style: 'Realistic',
-      description: 'Detailed realistic rose with intricate shading and highlights',
-      imageUrl: null,
-      tags: ['flower', 'realistic', 'detailed'],
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: '2',
-      title: 'Dragon Traditional',
-      style: 'Traditional',
-      description: 'Classic traditional dragon design with bold lines and vibrant colors',
-      imageUrl: null,
-      tags: ['dragon', 'mythology', 'colorful'],
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: '3',
-      title: 'Geometric Mandala',
-      style: 'Geometric',
-      description: 'Sacred geometric mandala pattern with perfect symmetry',
-      imageUrl: null,
-      tags: ['mandala', 'symmetry', 'spiritual'],
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: '4',
-      title: 'Wolf Tribal',
-      style: 'Tribal',
-      description: 'Bold tribal wolf design with flowing curves and sharp edges',
-      imageUrl: null,
-      tags: ['wolf', 'animal', 'bold'],
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: '5',
-      title: 'Watercolor Bird',
-      style: 'Watercolor',
-      description: 'Artistic watercolor-style bird with soft color transitions',
-      imageUrl: null,
-      tags: ['bird', 'artistic', 'colorful'],
-      createdAt: new Date().toISOString()
-    },
-    {
-      _id: '6',
-      title: 'Minimalist Arrow',
-      style: 'Minimalist',
-      description: 'Clean and simple arrow design with perfect proportions',
-      imageUrl: null,
-      tags: ['arrow', 'simple', 'clean'],
-      createdAt: new Date().toISOString()
-    }
-  ];
-
   // Fetch designs
   const fetchDesigns = async () => {
     try {
       console.log('[Gallery] Fetching designs from API...');
       const response = await request(() => tattooDesignService.getAll());
       console.log('[Gallery] Full API Response:', response);
-      console.log('[Gallery] Response structure check:');
-      console.log('  - response?.data:', !!response?.data);
-      console.log('  - response?.data?.data:', !!response?.data?.data);
-      console.log('  - response?.data?.data?.designs:', !!response?.data?.data?.designs);
-      console.log('  - designs length:', response?.data?.data?.designs?.length || 0);
-      
-      // Check for designs in the correct nested structure
-      if (response?.data?.data?.designs && response.data.data.designs.length > 0) {
-        console.log('[Gallery] ✓ Loaded designs from API:', response.data.data.designs.length);
-        setDesigns(response.data.data.designs);
-        setFilteredDesigns(response.data.data.designs);
-      } else if (response?.data?.designs && response.data.designs.length > 0) {
-        // Alternative structure
-        console.log('[Gallery] ✓ Loaded designs from API (alt structure):', response.data.designs.length);
-        setDesigns(response.data.designs);
-        setFilteredDesigns(response.data.designs);
-      } else if (response?.success && response?.data?.data?.designs?.length === 0) {
-        // API successful but no gallery designs - use sample data
-        console.log('[Gallery] ⚠ No gallery designs from API, using sample data');
-        setDesigns(sampleDesigns);
-        setFilteredDesigns(sampleDesigns);
+      const apiDesigns = response?.data?.data?.designs || response?.data?.designs || [];
+
+      if (Array.isArray(apiDesigns)) {
+        console.log('[Gallery] ✓ Loaded designs from API:', apiDesigns.length);
+        setDesigns(apiDesigns);
+        setFilteredDesigns(apiDesigns);
       } else {
-        // Use sample data if no designs from API
-        console.log('[Gallery] ⚠ No designs from API, using sample data');
-        console.log('[Gallery] Response was:', JSON.stringify(response, null, 2));
-        setDesigns(sampleDesigns);
-        setFilteredDesigns(sampleDesigns);
+        console.log('[Gallery] ⚠ Unexpected API response shape, showing empty gallery');
+        setDesigns([]);
+        setFilteredDesigns([]);
       }
     } catch (err) {
       console.error('[Gallery] ✗ Error fetching designs:', err);
       console.error('[Gallery] Error details:', err.response || err.message);
-      console.log('[Gallery] Using sample data due to API error');
-      setDesigns(sampleDesigns);
-      setFilteredDesigns(sampleDesigns);
+      setDesigns([]);
+      setFilteredDesigns([]);
     }
   };
 

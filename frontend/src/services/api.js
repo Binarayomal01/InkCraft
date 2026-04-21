@@ -68,6 +68,7 @@ export const tattooDesignService = {
   delete: (id) => api.delete(`/tattoo-designs/user/${id}`),
   generateAI: (prompt) => api.post('/tattoo-designs/ai-generate', prompt),
   // Admin methods
+  adminGetAll: () => api.get('/tattoo-designs/admin?limit=1000'),
   adminCreate: (designData) => api.post('/tattoo-designs/admin', designData),
   adminDelete: (id) => api.delete(`/tattoo-designs/admin/${id}`),
 };

@@ -110,7 +110,7 @@ const seedData = async () => {
     // Create Tattoo Designs
     console.log('🎨 Creating tattoo designs...');
     
-    const designs = await TattooDesign.create([
+    const seedDesigns = [
       {
         title: 'Majestic Dragon',
         description: 'A fierce and detailed dragon design with intricate scales and flowing movement. Perfect for those seeking a powerful and dynamic piece.',
@@ -291,7 +291,14 @@ const seedData = async () => {
         views: 445,
         createdBy: users[0]._id
       }
-    ]);
+    ];
+
+    const designs = await TattooDesign.create(
+      seedDesigns.map((design) => ({
+        ...design,
+        isGalleryDesign: true
+      }))
+    );
     
     console.log(`✅ Created ${designs.length} tattoo designs`);
 

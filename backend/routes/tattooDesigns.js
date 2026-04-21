@@ -38,10 +38,17 @@ router.get('/user/liked', authenticateToken, asyncHandler(tattooDesignController
 // @access  Private
 router.delete('/user/:id', authenticateToken, asyncHandler(tattooDesignController.deleteUserDesign));
 
+// ADMIN ROUTES
+
+// @desc    Get all designs for admin management
+// @route   GET /api/tattoo-designs/admin
+// @access  Private (Admin)
+router.get('/admin', authenticateToken, requireAdmin, asyncHandler(tattooDesignController.getAllDesignsAdmin));
+
 // @desc    Get design by ID
 // @route   GET /api/tattoo-designs/:id
-// @access  Public
-router.get('/:id', asyncHandler(tattooDesignController.getDesignById));
+// @access  Public (private designs require owner/admin)
+router.get('/:id', optionalAuth, asyncHandler(tattooDesignController.getDesignById));
 
 // USER ROUTES (Optional Auth - works for both authenticated and anonymous users)
 
@@ -49,8 +56,6 @@ router.get('/:id', asyncHandler(tattooDesignController.getDesignById));
 // @route   POST /api/tattoo-designs/:id/like
 // @access  Private
 router.post('/:id/like', authenticateToken, generalRateLimit, asyncHandler(tattooDesignController.toggleLike));
-
-// ADMIN ROUTES
 
 // @desc    Create a new design (admin only)
 // @route   POST /api/tattoo-designs/admin

@@ -503,9 +503,10 @@ const getAllDesigns = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    // Build query filter - show all active designs
+    // Build query filter - show only explicitly public gallery designs
     const filter = { 
-      isActive: true
+      isActive: true,
+      isGalleryDesign: true
     };
 
     if (style) filter.style = style;
@@ -567,9 +568,10 @@ const getAllDesigns = async (req, res) => {
     const totalPages = Math.ceil(totalDesigns / limit);
 
     // Get unique values for filters
-    const styleOptions = await TattooDesign.distinct('style', { isActive: true });
-    const categoryOptions = await TattooDesign.distinct('category', { isActive: true });
-    const sizeOptions = await TattooDesign.distinct('size', { isActive: true });
+    const publicFilter = { isActive: true, isGalleryDesign: true };
+    const styleOptions = await TattooDesign.distinct('style', publicFilter);
+    const categoryOptions = await TattooDesign.distinct('category', publicFilter);
+    const sizeOptions = await TattooDesign.distinct('size', publicFilter);
 
     console.log(`Returning ${designsWithOptimizedImages.length} designs (images optimized for performance)`);
 
@@ -601,6 +603,131 @@ const getAllDesigns = async (req, res) => {
   }
 };
 
+// @desc    Get all tattoo designs for admin management
+// @route   GET /api/tattoo-designs/admin
+// @access  Private (Admin)
+const getAllDesignsAdmin = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      style,
+      category,
+      size,
+      minPrice,
+      maxPrice,
+      search,
+      featured,
+      includePrivate = 'false',
+      includeInactive = 'false',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const parsedLimit = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const filter = {};
+    if (includeInactive !== 'true') {
+      filter.isActive = true;
+    }
+
+    // Admin design management shows public portfolio designs by default.
+    // Private user-saved designs can be included explicitly with includePrivate=true.
+    if (includePrivate !== 'true') {
+      filter.isGalleryDesign = true;
+    }
+
+    if (style) filter.style = style;
+    if (category) filter.category = category;
+    if (size) filter.size = size;
+    if (featured !== undefined) filter.isFeatured = featured === 'true';
+
+    if (minPrice || maxPrice) {
+      filter.estimatedPrice = {};
+      if (minPrice) filter.estimatedPrice.$gte = parseInt(minPrice, 10);
+      if (maxPrice) filter.estimatedPrice.$lte = parseInt(maxPrice, 10);
+    }
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
+    }
+
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const designs = await TattooDesign.find(filter)
+      .populate('createdBy', 'name email role')
+      .sort(sortObj)
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('-likes')
+      .lean();
+
+    const designsWithOptimizedImages = designs.map((design) => {
+      const { additionalImages, ...designWithoutAdditional } = design;
+
+      if (design.imageUrl && design.imageUrl.startsWith('data:image') && design.imageUrl.length > 10000) {
+        return {
+          ...designWithoutAdditional,
+          imageUrl: null,
+          hasImage: true
+        };
+      }
+
+      return {
+        ...designWithoutAdditional,
+        hasImage: !!(design.imageUrl && design.imageUrl.length > 0)
+      };
+    });
+
+    const totalDesigns = await TattooDesign.countDocuments(filter);
+    const totalPages = Math.ceil(totalDesigns / parsedLimit);
+
+    const optionFilter = {};
+    if (includeInactive !== 'true') {
+      optionFilter.isActive = true;
+    }
+    if (includePrivate !== 'true') {
+      optionFilter.isGalleryDesign = true;
+    }
+    const styleOptions = await TattooDesign.distinct('style', optionFilter);
+    const categoryOptions = await TattooDesign.distinct('category', optionFilter);
+    const sizeOptions = await TattooDesign.distinct('size', optionFilter);
+
+    res.json({
+      success: true,
+      data: {
+        designs: designsWithOptimizedImages,
+        pagination: {
+          currentPage: parsedPage,
+          totalPages,
+          totalDesigns,
+          hasNext: parsedPage < totalPages,
+          hasPrev: parsedPage > 1
+        },
+        filters: {
+          styles: styleOptions,
+          categories: categoryOptions,
+          sizes: sizeOptions
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get admin designs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching admin designs'
+    });
+  }
+};
+
 // @desc    Get design by ID
 // @route   GET /api/tattoo-designs/:id
 // @access  Public
@@ -622,6 +749,21 @@ const getDesignById = async (req, res) => {
         success: false,
         message: 'Design not available'
       });
+    }
+
+    // Private designs are only accessible to owner/admin.
+    if (!design.isGalleryDesign) {
+      const requesterId = req.user?.userId;
+      const ownerId = design.createdBy?._id ? design.createdBy._id.toString() : design.createdBy?.toString();
+      const isOwner = Boolean(requesterId && ownerId && requesterId.toString() === ownerId);
+      const isAdmin = req.user?.role === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(404).json({
+          success: false,
+          message: 'Design not found'
+        });
+      }
     }
 
     // Increment view count
@@ -732,6 +874,20 @@ const toggleLike = async (req, res) => {
         success: false,
         message: 'Design not found'
       });
+    }
+
+    // Private designs cannot be liked by non-owners/non-admins.
+    if (!design.isGalleryDesign) {
+      const ownerId = design.createdBy ? design.createdBy.toString() : null;
+      const isOwner = Boolean(ownerId && ownerId === req.user.userId.toString());
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'You cannot like a private design'
+        });
+      }
     }
 
     await design.toggleLike(req.user.userId);
@@ -1151,6 +1307,7 @@ const deleteUserDesign = async (req, res) => {
 module.exports = {
   // Public methods
   getAllDesigns,
+  getAllDesignsAdmin,
   getDesignById,
   generateAIDesign,
   toggleLike,

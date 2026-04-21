@@ -22,6 +22,27 @@ npm run seed
 node seed.js
 ```
 
+## Gallery Visibility Note
+
+The app now uses strict privacy defaults:
+- User-saved/generated designs are private by default.
+- Public gallery only shows designs with `isGalleryDesign=true`.
+- Seeded studio designs are marked public automatically.
+
+If your database was created before this change, run the one-time migration below.
+
+### Migration (Existing Database)
+
+Dry run (preview only):
+```bash
+npm run migrate:public-designs:dry
+```
+
+Apply migration:
+```bash
+npm run migrate:public-designs
+```
+
 ## Login Credentials
 
 After seeding, you can log in with these credentials:

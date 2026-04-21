@@ -931,9 +931,6 @@ const Dashboard = () => {
                     </svg>
                     <h4 className="font-medium text-purple-900">AI Generated Design</h4>
                   </div>
-                  {selectedDesign.prompt && (
-                    <p className="text-sm text-purple-700">Prompt: {selectedDesign.prompt}</p>
-                  )}
                 </div>
               )}
               

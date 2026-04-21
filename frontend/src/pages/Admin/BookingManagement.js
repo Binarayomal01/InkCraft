@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useTheme } from '../../context/ThemeContext';
@@ -153,7 +154,19 @@ const BookingManagement = () => {
   };
 
   const formatTime = (timeString) => {
-    return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
+    if (!timeString) return '';
+
+    // If the backend stores a human-readable range like "9:00 AM - 12:00 PM",
+    // return it as-is to avoid parsing errors (which produce "Invalid Date").
+    if (timeString.includes('-') || /AM|PM/i.test(timeString)) {
+      return timeString;
+    }
+
+    // Otherwise try to parse single time strings like "14:00".
+    const parsed = new Date(`2000-01-01T${timeString}`);
+    if (isNaN(parsed)) return timeString;
+
+    return parsed.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true

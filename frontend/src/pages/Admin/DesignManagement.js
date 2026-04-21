@@ -111,7 +111,7 @@ const DesignManagement = () => {
   const fetchDesigns = async () => {
     try {
       console.log('[DesignManagement] Fetching designs from API...');
-      const response = await request(() => tattooDesignService.getAll());
+      const response = await request(() => tattooDesignService.adminGetAll());
       console.log('[DesignManagement] API Response:', response);
       console.log('[DesignManagement] Response data structure:', {
         hasData: !!response?.data,
@@ -326,8 +326,8 @@ const DesignManagement = () => {
         console.log('Token value:', localStorage.getItem('token')?.substring(0, 20) + '...');
         
         try {
-          console.log('Calling tattooDesignService.create...');
-          const response = await request(() => tattooDesignService.create(designData));
+          console.log('Calling tattooDesignService.adminCreate...');
+          const response = await request(() => tattooDesignService.adminCreate(designData));
           console.log('Response received:', response);
           console.log('Response success:', response?.success);
           console.log('Response data:', response?.data);
