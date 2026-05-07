@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 const { Booking, TattooDesign } = require('../models');
+const {
+  sendBookingConfirmationEmail,
+  sendBookingStatusEmail
+} = require('../services/emailService');
 
 const BOOKING_POPULATE_OPTIONS = [
   { path: 'userId', select: 'name email phone' },
@@ -101,6 +105,19 @@ const createBooking = async (req, res) => {
 
     // Populate user info for response
     await booking.populate(BOOKING_POPULATE_OPTIONS);
+
+    const bookingUser = booking.userId;
+    if (bookingUser && bookingUser.email) {
+      try {
+        await sendBookingConfirmationEmail({
+          to: bookingUser.email,
+          name: bookingUser.name,
+          booking
+        });
+      } catch (emailError) {
+        console.error('Booking confirmation email error:', emailError.message);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -480,6 +497,8 @@ const updateBookingStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = booking.status;
+
     // Update booking
     booking.status = status;
     if (adminNotes !== undefined) booking.adminNotes = adminNotes;
@@ -488,6 +507,21 @@ const updateBookingStatus = async (req, res) => {
     if (rejectionReason !== undefined) booking.rejectionReason = rejectionReason;
 
     await booking.save();
+
+    const bookingUser = booking.userId;
+    const statusChanged = previousStatus !== booking.status;
+
+    if (statusChanged && bookingUser && bookingUser.email) {
+      try {
+        await sendBookingStatusEmail({
+          to: bookingUser.email,
+          name: bookingUser.name,
+          booking
+        });
+      } catch (emailError) {
+        console.error('Booking status email error:', emailError.message);
+      }
+    }
 
     res.json({
       success: true,

@@ -9,6 +9,7 @@
     "seed": "node seed.js",
     "migrate:public-designs": "node migrate-public-designs.js",
     "migrate:public-designs:dry": "node migrate-public-designs.js --dry-run",
+    "test:chatbot": "node tests/chatbotMatcher.test.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

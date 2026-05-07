@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const chatbotConfig = require('../services/chatbotConfig');
 
 const chatMessageSchema = new mongoose.Schema({
   userId: {
@@ -63,157 +64,397 @@ chatMessageSchema.virtual('sessionDuration').get(function() {
 
 // Static method to get predefined responses
 chatMessageSchema.statics.getPredefinedResponses = function() {
-  return {
-    greeting: [
-      "Hello! Welcome to InkCraft Studio! 🎨 I'm here to help you with any questions about our tattoo services, booking process, or aftercare instructions. How can I assist you today?",
-      "Hi there! Thanks for visiting InkCraft Studio! ✨ I can help you with booking questions, aftercare tips, studio policies, and more. What would you like to know?",
-      "Welcome to InkCraft! 👋 I'm your virtual assistant. I can help with booking inquiries, tattoo aftercare, studio information, and general questions. How may I help you?"
-    ],
-    booking_faq: {
-      "how to book|make appointment|schedule": "To book a tattoo appointment: 1) Create an account or log in 2) Browse our tattoo gallery for inspiration 3) Fill out the booking form with your tattoo idea, preferred style, and date 4) Our team will review and confirm your appointment within 24-48 hours. You can also use our AI Design Generator for custom ideas!",
-      
-      "booking requirements|what do i need": "For your tattoo appointment, please bring: • Valid government-issued ID (18+ required) • Recent meal (no empty stomach) • Comfortable clothing • Payment method • Be well-rested and sober • Avoid alcohol 24 hours before appointment",
-      
-      "cancellation policy|cancel appointment": "You can cancel or reschedule your appointment up to 48 hours in advance without penalty. Cancellations within 48 hours may incur a fee. Please contact us as soon as possible if you need to make changes to your booking.",
-      
-      "consultation|design process": "All bookings include a free consultation where we discuss your design, placement, size, and any modifications. We'll create a custom stencil and you can make adjustments before we begin. The design process is collaborative!",
+  return chatbotConfig.responses;
+};
 
-      "deposit|payment": "We require a 50% deposit to secure your booking, with the remaining balance due on the day of your appointment. We accept cash, card, and digital payments. Deposits are non-refundable but can be transferred to a new date with 48+ hours notice."
-    },
-    aftercare: {
-      "aftercare instructions|how to care": "Essential tattoo aftercare: 1) Keep bandage on for 2-4 hours 2) Gently wash with antibacterial soap 3) Pat dry, don't rub 4) Apply thin layer of unscented lotion 2-3 times daily 5) Avoid soaking (pools, baths) for 2-3 weeks 6) No direct sunlight 7) Don't pick scabs or scratch. Full healing takes 2-6 weeks.",
-      
-      "infection signs|when to worry": "See a doctor if you notice: • Excessive redness spreading • Green or yellow pus • Red streaks • Fever • Intense heat from tattoo area • Excessive swelling after 48 hours. Some redness, mild swelling, and clear fluid are normal for first few days.",
-      
-      "swimming|water activities": "Avoid swimming pools, hot tubs, baths, and ocean water for 2-3 weeks. These can introduce bacteria and prolonged soaking can damage healing skin. Quick showers are fine after 24 hours.",
-      
-      "sun exposure|sunscreen": "Keep new tattoo out of direct sunlight for at least 3 weeks. After healing, always use SPF 30+ sunscreen to prevent fading. UV rays can damage tattoo ink and cause premature fading.",
-      
-      "exercise|gym|working out": "Light activity is fine, but avoid intense workouts for first week. Excessive sweating and stretching can interfere with healing. Listen to your body and don't overdo it."
-    },
-    studio_info: {
-      "hours|when open": "InkCraft Studio is open: Monday-Saturday 10 AM - 8 PM, Sunday 12 PM - 6 PM. We're closed on major holidays. Walk-ins welcome subject to availability, but appointments are recommended.",
-      
-      "location|address|where": "We're located in the heart of downtown. Check our contact page for exact address and directions. We're accessible by public transit and have parking nearby.",
-      
-      "artists|who works": "Our talented team includes certified tattoo artists specializing in various styles: traditional, realistic, watercolor, minimalist, and more. Each artist brings unique skills and artistic vision to create your perfect tattoo.",
-      
-      "safety|health standards": "InkCraft maintains the highest health and safety standards: • All equipment is sterilized • Single-use needles • Licensed and certified artists • Regular health inspections • Clean, sterile environment • Following all local health regulations"
-    },
-    pricing: {
-      "cost|price|how much": "Tattoo pricing varies by size, complexity, and estimated time: • Small (2-4 inches): $80-200 • Medium (4-8 inches): $200-500 • Large (8+ inches): $500-1500+ • Hourly rate: $100-150/hour. Free consultations include price estimates. Complex designs and color work may cost more.",
-      
-      "minimum|smallest price": "Our shop minimum is $80, which covers small tattoos up to 2-3 inches. This includes setup, equipment, and artist time. Even small tattoos require the same safety protocols and preparation.",
-      
-      "touch up|free touch ups": "We offer one free touch-up session within 6 months if needed, provided you followed all aftercare instructions. Additional touch-ups or changes to original design may incur charges."
-    },
-    general: [
-      "I'm here to help with questions about tattoos, booking, aftercare, and our studio. Could you be more specific about what you'd like to know?",
-      "I can assist with information about our tattoo services, booking process, aftercare instructions, or studio policies. What specific topic interests you?",
-      "Feel free to ask about tattoo styles, booking procedures, aftercare tips, pricing, or anything else related to InkCraft Studio!"
-    ],
-    unknown: [
-      "I'm not sure I understand that question. I can help with tattoo booking, aftercare instructions, studio information, and general tattoo questions. Could you rephrase or ask about one of these topics?",
-      "I don't have information about that specific topic. I specialize in tattoo-related questions, booking assistance, and studio information. Is there something tattoo-related I can help with?",
-      "That's outside my area of expertise. I'm designed to help with InkCraft Studio services, tattoo booking, aftercare, and general tattoo information. What can I help you with in those areas?"
-    ]
+chatMessageSchema.statics.pickRandom = function(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return '';
+  }
+
+  return items[Math.floor(Math.random() * items.length)];
+};
+
+chatMessageSchema.statics.escapeRegex = function(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+chatMessageSchema.statics.normalizeMessage = function(message) {
+  if (!message) {
+    return '';
+  }
+
+  let normalizedMessage = String(message)
+    .toLowerCase()
+    .replace(/[’']/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const replacements = chatbotConfig.typoReplacements || {};
+
+  for (const [source, target] of Object.entries(replacements)) {
+    const sourcePattern = new RegExp(`\\b${this.escapeRegex(source)}\\b`, 'g');
+    normalizedMessage = normalizedMessage.replace(sourcePattern, target);
+  }
+
+  return normalizedMessage;
+};
+
+chatMessageSchema.statics.tokenizeMessage = function(normalizedMessage) {
+  if (!normalizedMessage) {
+    return [];
+  }
+
+  return normalizedMessage.split(' ').filter(Boolean);
+};
+
+chatMessageSchema.statics.getEditDistance = function(sourceWord, targetWord) {
+  const matrix = Array.from({ length: sourceWord.length + 1 }, () => []);
+
+  for (let i = 0; i <= sourceWord.length; i += 1) {
+    matrix[i][0] = i;
+  }
+
+  for (let j = 0; j <= targetWord.length; j += 1) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= sourceWord.length; i += 1) {
+    for (let j = 1; j <= targetWord.length; j += 1) {
+      const substitutionCost = sourceWord[i - 1] === targetWord[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + substitutionCost
+      );
+    }
+  }
+
+  return matrix[sourceWord.length][targetWord.length];
+};
+
+chatMessageSchema.statics.isNearWordMatch = function(sourceWord, targetWord) {
+  if (!sourceWord || !targetWord) {
+    return false;
+  }
+
+  if (sourceWord === targetWord) {
+    return true;
+  }
+
+  if (Math.abs(sourceWord.length - targetWord.length) > 1) {
+    return false;
+  }
+
+  if (sourceWord.length < 4 || targetWord.length < 4) {
+    return false;
+  }
+
+  if (sourceWord.startsWith(targetWord) || targetWord.startsWith(sourceWord)) {
+    return true;
+  }
+
+  return this.getEditDistance(sourceWord, targetWord) <= 1;
+};
+
+chatMessageSchema.statics.scorePattern = function(normalizedMessage, tokenSet, pattern) {
+  const patternTerms = pattern
+    .split('|')
+    .map((term) => this.normalizeMessage(term))
+    .filter(Boolean);
+
+  const tokenList = Array.from(tokenSet);
+  const matchedKeywords = [];
+  let score = 0;
+
+  for (const term of patternTerms) {
+    if (term.includes(' ')) {
+      if (normalizedMessage.includes(term)) {
+        score += 3;
+        matchedKeywords.push(term);
+        continue;
+      }
+
+      const termWords = term.split(' ').filter(Boolean);
+      const matchedWords = termWords.filter((termWord) => {
+        return tokenSet.has(termWord) || tokenList.some((token) => this.isNearWordMatch(token, termWord));
+      }).length;
+      const stopWords = new Set(chatbotConfig.stopWords || []);
+      const meaningfulTermWords = termWords.filter((termWord) => termWord.length >= 4 && !stopWords.has(termWord));
+      const meaningfulMatches = meaningfulTermWords.filter((termWord) => {
+        return tokenSet.has(termWord) || tokenList.some((token) => this.isNearWordMatch(token, termWord));
+      }).length;
+
+      if (matchedWords === termWords.length && termWords.length > 0) {
+        score += 2.2;
+        matchedKeywords.push(term);
+      } else if (matchedWords >= Math.ceil(termWords.length * 0.7) && matchedWords > 0) {
+        score += 1.3;
+        matchedKeywords.push(term);
+      } else if (matchedWords > 0 && termWords.length >= 2 && meaningfulMatches > 0) {
+        score += 1;
+        matchedKeywords.push(term);
+      }
+
+      continue;
+    }
+
+    if (tokenSet.has(term)) {
+      score += 2;
+      matchedKeywords.push(term);
+      continue;
+    }
+
+    if (tokenList.some((token) => this.isNearWordMatch(token, term))) {
+      score += 1.2;
+      matchedKeywords.push(term);
+      continue;
+    }
+
+    if (term.length > 4 && normalizedMessage.includes(term)) {
+      score += 0.8;
+      matchedKeywords.push(term);
+    }
+  }
+
+  return {
+    score,
+    matchedKeywords
   };
 };
 
-// Static method to process user message and generate response
-chatMessageSchema.statics.generateResponse = function(userMessage) {
+chatMessageSchema.statics.getSuggestionsByType = function() {
+  return chatbotConfig.suggestionsByType || {};
+};
+
+chatMessageSchema.statics.getIntentDefinitions = function(responses) {
+  const suggestions = this.getSuggestionsByType();
+  const intentOrder = chatbotConfig.intentOrder || [];
+
+  return intentOrder
+    .filter((type) => responses[type] && typeof responses[type] === 'object')
+    .map((type) => ({
+      type,
+      patterns: responses[type],
+      suggestions: suggestions[type] || []
+    }));
+};
+
+chatMessageSchema.statics.getIntentHints = function() {
+  return chatbotConfig.intentHints || {};
+};
+
+chatMessageSchema.statics.getTopicLabel = function(intentType) {
+  const topicLabelMap = {
+    booking_faq: 'booking',
+    aftercare: 'aftercare',
+    studio_info: 'studio information',
+    pricing: 'pricing',
+    general: 'tattoo services',
+    unknown: 'tattoo services'
+  };
+
+  return topicLabelMap[intentType] || 'tattoo services';
+};
+
+chatMessageSchema.statics.getEscalationSuggestions = function(baseSuggestions = []) {
+  const escalationActions = chatbotConfig.escalationActions || [];
+  return Array.from(new Set([...baseSuggestions, ...escalationActions])).slice(0, 3);
+};
+
+chatMessageSchema.statics.isFollowUpMessage = function(normalizedMessage, tokens) {
+  const followUpPhrases = chatbotConfig.followUpPhrases || [];
+  const followUpReferenceTokens = chatbotConfig.followUpReferenceTokens || [];
+
+  const hasFollowUpPhrase = followUpPhrases.some((phrase) => normalizedMessage.includes(phrase));
+  const hasReferenceToken = tokens.some((token) => followUpReferenceTokens.includes(token));
+  const isShortPrompt = tokens.length > 0 && tokens.length <= 7;
+
+  return hasFollowUpPhrase || (hasReferenceToken && isShortPrompt);
+};
+
+chatMessageSchema.statics.detectExplicitIntent = function(normalizedMessage, tokenSet) {
+  const tokenList = Array.from(tokenSet);
+  const intentHints = this.getIntentHints();
+  let bestMatch = null;
+
+  for (const [intentType, hints] of Object.entries(intentHints)) {
+    const matchedHints = (hints || []).filter((hint) => {
+      const normalizedHint = this.normalizeMessage(hint);
+
+      if (!normalizedHint) {
+        return false;
+      }
+
+      if (normalizedHint.includes(' ')) {
+        return normalizedMessage.includes(normalizedHint);
+      }
+
+      return tokenSet.has(normalizedHint)
+        || tokenList.some((token) => this.isNearWordMatch(token, normalizedHint));
+    });
+
+    if (matchedHints.length === 0) {
+      continue;
+    }
+
+    if (!bestMatch || matchedHints.length > bestMatch.matchCount) {
+      bestMatch = {
+        intentType,
+        keywords: matchedHints,
+        matchCount: matchedHints.length
+      };
+    }
+  }
+
+  return bestMatch;
+};
+
+chatMessageSchema.statics.generateResponse = function(userMessage, sessionContext = {}) {
   const responses = this.getPredefinedResponses();
-  const message = userMessage.toLowerCase().trim();
-  
-  // Greeting patterns
-  if (/(^hi|^hello|^hey|^good morning|^good afternoon|^good evening)/.test(message)) {
-    const greetings = responses.greeting;
+  const suggestionsByType = this.getSuggestionsByType();
+  const normalizedMessage = this.normalizeMessage(userMessage);
+  const tokens = this.tokenizeMessage(normalizedMessage);
+  const tokenSet = new Set(tokens);
+  const thresholds = chatbotConfig.thresholds || {};
+  const strongIntentThreshold = thresholds.strongIntent || 2;
+  const weakIntentThreshold = thresholds.weakIntent || 1.2;
+  const confidenceFloor = thresholds.confidenceFloor || 0.62;
+  const hasFollowUpCue = this.isFollowUpMessage(normalizedMessage, tokens);
+  const explicitIntentMatch = this.detectExplicitIntent(normalizedMessage, tokenSet);
+  const explicitIntentType = explicitIntentMatch ? explicitIntentMatch.intentType : null;
+
+  if (!normalizedMessage) {
     return {
-      response: greetings[Math.floor(Math.random() * greetings.length)],
+      response: this.pickRandom(responses.unknown),
+      type: 'unknown',
+      confidence: 0.2,
+      keywords: ['unknown'],
+      suggestions: this.getEscalationSuggestions(suggestionsByType.unknown || [])
+    };
+  }
+
+  const greetingPhrases = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
+  const hasGreetingPrefix = greetingPhrases.some((phrase) => normalizedMessage.startsWith(phrase));
+  const hasOnlyGreeting = hasGreetingPrefix && tokens.length <= 3;
+
+  if (hasOnlyGreeting) {
+    return {
+      response: this.pickRandom(responses.greeting),
       type: 'greeting',
-      confidence: 1.0,
+      confidence: 0.98,
       keywords: ['greeting'],
-      suggestions: ['How do I book an appointment?', 'What are your aftercare instructions?', 'What are your prices?']
+      suggestions: this.getEscalationSuggestions(suggestionsByType.greeting || [])
     };
   }
-  
-  // Check booking FAQ patterns
-  for (const [pattern, response] of Object.entries(responses.booking_faq)) {
-    const regex = new RegExp(pattern.split('|').join('|'), 'i');
-    if (regex.test(message)) {
-      return {
-        response: response,
-        type: 'booking_faq',
-        confidence: 0.9,
-        keywords: pattern.split('|'),
-        suggestions: ['Tell me about aftercare', 'What are your studio hours?', 'How much do tattoos cost?']
-      };
+
+  const intentDefinitions = this.getIntentDefinitions(responses);
+  const intentCandidates = [];
+
+  for (const intentDefinition of intentDefinitions) {
+    for (const [pattern, responseText] of Object.entries(intentDefinition.patterns)) {
+      const patternResult = this.scorePattern(normalizedMessage, tokenSet, pattern);
+      if (patternResult.score <= 0) {
+        continue;
+      }
+
+      let candidateScore = patternResult.score;
+
+      if (explicitIntentType && explicitIntentType === intentDefinition.type) {
+        candidateScore += 0.7;
+      }
+
+      if (!explicitIntentType && hasFollowUpCue && sessionContext.lastIntent === intentDefinition.type) {
+        candidateScore += 0.9;
+      }
+
+      intentCandidates.push({
+        type: intentDefinition.type,
+        response: responseText,
+        score: candidateScore,
+        keywords: patternResult.matchedKeywords,
+        suggestions: intentDefinition.suggestions
+      });
     }
   }
-  
-  // Check aftercare patterns
-  for (const [pattern, response] of Object.entries(responses.aftercare)) {
-    const regex = new RegExp(pattern.split('|').join('|'), 'i');
-    if (regex.test(message)) {
+
+  intentCandidates.sort((left, right) => right.score - left.score);
+  const bestCandidate = intentCandidates[0];
+
+  if (bestCandidate && bestCandidate.score >= strongIntentThreshold) {
+    if (hasGreetingPrefix && tokens.length <= 5 && bestCandidate.score < 3) {
       return {
-        response: response,
-        type: 'aftercare',
-        confidence: 0.9,
-        keywords: pattern.split('|'),
-        suggestions: ['More aftercare tips', 'How to book an appointment', 'Studio safety standards']
+        response: this.pickRandom(responses.greeting),
+        type: 'greeting',
+        confidence: 0.88,
+        keywords: ['greeting'],
+        suggestions: this.getEscalationSuggestions(bestCandidate.suggestions)
       };
     }
-  }
-  
-  // Check studio info patterns
-  for (const [pattern, response] of Object.entries(responses.studio_info)) {
-    const regex = new RegExp(pattern.split('|').join('|'), 'i');
-    if (regex.test(message)) {
-      return {
-        response: response,
-        type: 'studio_info',
-        confidence: 0.9,
-        keywords: pattern.split('|'),
-        suggestions: ['How to book', 'Pricing information', 'Aftercare instructions']
-      };
-    }
-  }
-  
-  // Check pricing patterns
-  for (const [pattern, response] of Object.entries(responses.pricing)) {
-    const regex = new RegExp(pattern.split('|').join('|'), 'i');
-    if (regex.test(message)) {
-      return {
-        response: response,
-        type: 'pricing',
-        confidence: 0.9,
-        keywords: pattern.split('|'),
-        suggestions: ['Book an appointment', 'View tattoo gallery', 'Aftercare information']
-      };
-    }
-  }
-  
-  // Check for tattoo-related general terms
-  const generalTerms = /tattoo|ink|design|artist|studio|pain|hurt|heal/;
-  if (generalTerms.test(message)) {
-    const generalResponses = responses.general;
+
+    const boundedScore = Math.min(bestCandidate.score, 6);
+    const confidence = Number((confidenceFloor + ((boundedScore - strongIntentThreshold) / (6 - strongIntentThreshold)) * 0.34).toFixed(2));
+
     return {
-      response: generalResponses[Math.floor(Math.random() * generalResponses.length)],
-      type: 'general',
-      confidence: 0.7,
-      keywords: ['general'],
-      suggestions: ['How to book an appointment', 'Aftercare instructions', 'Pricing information', 'View our gallery']
+      response: bestCandidate.response,
+      type: bestCandidate.type,
+      confidence: Math.max(confidenceFloor, Math.min(confidence, 0.96)),
+      keywords: bestCandidate.keywords.slice(0, 6),
+      suggestions: this.getEscalationSuggestions(bestCandidate.suggestions)
     };
   }
-  
-  // Default unknown response
-  const unknownResponses = responses.unknown;
+
+  if (hasFollowUpCue && !explicitIntentType && sessionContext.lastIntent && suggestionsByType[sessionContext.lastIntent]) {
+    const contextualTopic = this.getTopicLabel(sessionContext.lastIntent);
+    return {
+      response: `I can continue on ${contextualTopic}. Do you want details, pricing, or next steps? If you want personal help, you can book a consultation or contact the studio team.`,
+      type: sessionContext.lastIntent,
+      confidence: 0.56,
+      keywords: ['follow_up', sessionContext.lastIntent],
+      suggestions: this.getEscalationSuggestions(suggestionsByType[sessionContext.lastIntent])
+    };
+  }
+
+  const generalTerms = ['tattoo', 'ink', 'design', 'artist', 'studio', 'pain', 'hurt', 'heal', 'healing'];
+  const matchedGeneralTerms = generalTerms.filter((term) => {
+    return tokenSet.has(term) || Array.from(tokenSet).some((token) => this.isNearWordMatch(token, term));
+  });
+
+  if (bestCandidate && bestCandidate.score >= weakIntentThreshold) {
+    const topicLabel = this.getTopicLabel(bestCandidate.type);
+    return {
+      response: `I think you might be asking about ${topicLabel}. Could you add one more detail so I can answer precisely? If needed, you can book a consultation or contact the studio team.`,
+      type: 'unknown',
+      confidence: 0.45,
+      keywords: bestCandidate.keywords.slice(0, 4),
+      suggestions: this.getEscalationSuggestions(bestCandidate.suggestions)
+    };
+  }
+
+  if (matchedGeneralTerms.length >= 2) {
+    return {
+      response: this.pickRandom(responses.general),
+      type: 'general',
+      confidence: 0.58,
+      keywords: matchedGeneralTerms.slice(0, 5),
+      suggestions: this.getEscalationSuggestions(suggestionsByType.general || [])
+    };
+  }
+
+  const topCandidateTypes = Array.from(new Set(intentCandidates.map((candidate) => candidate.type))).slice(0, 2);
+  const fallbackSuggestions = this.getEscalationSuggestions(
+    topCandidateTypes.length > 0
+      ? topCandidateTypes.flatMap((type) => suggestionsByType[type] || [])
+      : (suggestionsByType.unknown || [])
+  );
+
   return {
-    response: unknownResponses[Math.floor(Math.random() * unknownResponses.length)],
+    response: `${this.pickRandom(responses.unknown)} If you want personal help, you can book a consultation or contact the studio team.`,
     type: 'unknown',
     confidence: 0.3,
-    keywords: ['unknown'],
-    suggestions: ['How do I book a tattoo?', 'What are your aftercare instructions?', 'What services do you offer?', 'What are your hours?']
+    keywords: topCandidateTypes.length > 0 ? topCandidateTypes : ['unknown'],
+    suggestions: fallbackSuggestions
   };
 };
 

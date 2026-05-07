@@ -40,6 +40,11 @@ router.get('/my-sessions', authenticateToken, asyncHandler(chatController.getUse
 // @access  Private (Admin)
 router.get('/admin/analytics', authenticateToken, requireAdmin, asyncHandler(chatController.getChatAnalytics));
 
+// @desc    Get chat quality summary (admin only)
+// @route   GET /api/chat/admin/quality-summary
+// @access  Private (Admin)
+router.get('/admin/quality-summary', authenticateToken, requireAdmin, asyncHandler(chatController.getChatQualitySummary));
+
 // @desc    Get all chat messages (admin only)
 // @route   GET /api/chat/admin/messages
 // @access  Private (Admin)

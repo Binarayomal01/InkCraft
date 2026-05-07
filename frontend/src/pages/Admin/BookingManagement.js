@@ -8,6 +8,7 @@ import Button from '../../components/UI/Button';
 import Alert from '../../components/UI/Alert';
 import Modal from '../../components/UI/Modal';
 import Select from '../../components/UI/Select';
+import Textarea from '../../components/UI/Textarea';
 
 const BookingManagement = () => {
   const [bookings, setBookings] = useState([]);
@@ -17,6 +18,7 @@ const BookingManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
   
   const { loading, error, request, clearError } = useApi();
   const { isDark } = useTheme();
@@ -192,25 +194,59 @@ const BookingManagement = () => {
   const handleBookingClick = (booking) => {
     setSelectedBooking(booking);
     setNewStatus(booking.status);
+    setRejectionReason(booking.rejectionReason || '');
     setShowModal(true);
+  };
+
+  const handleStatusChange = (statusValue) => {
+    setNewStatus(statusValue);
+
+    if (statusValue !== 'rejected') {
+      setRejectionReason('');
+    }
   };
 
   const handleStatusUpdate = async () => {
     if (!selectedBooking || !newStatus) return;
+
+    const trimmedRejectionReason = rejectionReason.trim();
+    if (newStatus === 'rejected' && !trimmedRejectionReason) {
+      return;
+    }
     
     setIsUpdating(true);
     try {
-      await request(() => bookingService.updateStatus(selectedBooking._id, { status: newStatus }));
+      const statusPayload = { status: newStatus };
+      if (newStatus === 'rejected') {
+        statusPayload.rejectionReason = trimmedRejectionReason;
+      } else {
+        // Clear previous reason when moving away from rejected.
+        statusPayload.rejectionReason = '';
+      }
+
+      const response = await request(() => bookingService.updateStatus(selectedBooking._id, statusPayload));
+      if (!response?.success) {
+        return;
+      }
+
+      const updatedBooking = response?.data?.data?.booking;
       
       // Update local state
       setBookings(prev => prev.map(booking => 
         booking._id === selectedBooking._id 
-          ? { ...booking, status: newStatus, updatedAt: new Date().toISOString() }
+          ? {
+              ...booking,
+              ...(updatedBooking || {}),
+              status: newStatus,
+              rejectionReason: newStatus === 'rejected' ? trimmedRejectionReason : '',
+              updatedAt: updatedBooking?.updatedAt || new Date().toISOString()
+            }
           : booking
       ));
       
       setShowModal(false);
       setSelectedBooking(null);
+      setRejectionReason('');
     } catch (err) {
       console.error('Failed to update booking status:', err);
     } finally {
@@ -222,12 +258,14 @@ const BookingManagement = () => {
     setShowModal(false);
     setSelectedBooking(null);
     setNewStatus('');
+    setRejectionReason('');
   };
 
   const selectedLinkedDesign =
     selectedBooking?.tattooDesignId && typeof selectedBooking.tattooDesignId === 'object'
       ? selectedBooking.tattooDesignId
       : null;
+  const isRejectionReasonMissing = newStatus === 'rejected' && !rejectionReason.trim();
 
   return (
     <div className="space-y-6">
@@ -524,10 +562,25 @@ const BookingManagement = () => {
                 <div className="flex-1">
                   <Select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
+                    onChange={(e) => handleStatusChange(e.target.value)}
                     options={statusUpdateOptions}
                     label="Status"
                   />
+
+                  {newStatus === 'rejected' && (
+                    <div className="mt-4">
+                      <Textarea
+                        label="Rejection Reason"
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        placeholder="Explain why this appointment is being rejected"
+                        required
+                        rows={3}
+                        maxLength={500}
+                        error={isRejectionReasonMissing ? 'Rejection reason is required' : ''}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="flex space-x-2">
                   <Button
@@ -541,7 +594,7 @@ const BookingManagement = () => {
                     variant="primary"
                     onClick={handleStatusUpdate}
                     loading={isUpdating}
-                    disabled={isUpdating || newStatus === selectedBooking.status}
+                    disabled={isUpdating || newStatus === selectedBooking.status || isRejectionReasonMissing}
                   >
                     Update Status
                   </Button>

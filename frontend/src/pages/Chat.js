@@ -1,36 +1,114 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useApi } from '../hooks/useApi';
 import { chatService } from '../services/api';
 import Button from '../components/UI/Button';
-import LoadingSpinner from '../components/UI/LoadingSpinner';
 import Alert from '../components/UI/Alert';
+
+const CHAT_SESSION_STORAGE_KEY = 'inkcraft_chat_session_id';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [chatStarted, setChatStarted] = useState(false);
+  const [sessionId, setSessionId] = useState('');
   
   const { user, isAuthenticated } = useAuth();
   const { isDark } = useTheme();
-  const { loading, error, request, clearError } = useApi();
+  const { error, request, clearError } = useApi();
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const persistSessionId = (value) => {
+    if (!value) {
+      return;
+    }
+
+    setSessionId(value);
+
+    try {
+      window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, value);
+    } catch (storageError) {
+      console.log('Unable to persist chat session ID:', storageError);
+    }
+  };
 
   const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (isAtBottom) {
+      scrollToBottom();
+    }
+  }, [messages, isAtBottom]);
 
-  // Load chat history on component mount
+  const handleScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsAtBottom(distanceFromBottom < 120); // threshold (px)
+  };
+
+  const loadChatHistory = useCallback(async (activeSessionId) => {
+    if (!activeSessionId) {
+      return;
+    }
+    
+    try {
+      const response = await request(() => chatService.getHistory(activeSessionId));
+
+      if (!response?.success) {
+        return;
+      }
+
+      const history = response?.data?.data?.messages || [];
+      if (history.length > 0) {
+        const chatHistoryMessages = history.flatMap((item) => {
+          const visitorSender = isAuthenticated ? 'user' : 'visitor';
+          return [
+            {
+              _id: `${item._id}-user`,
+              message: item.message,
+              sender: visitorSender,
+              timestamp: item.createdAt
+            },
+            {
+              _id: `${item._id}-bot`,
+              message: item.response,
+              sender: 'bot',
+              timestamp: item.createdAt
+            }
+          ];
+        });
+
+        setMessages(chatHistoryMessages);
+      }
+    } catch (err) {
+      console.log('No chat history found or error loading:', err);
+    }
+  }, [isAuthenticated, request]);
+
+  // Restore existing session and load history on component mount
   useEffect(() => {
-    loadChatHistory();
-  }, []);
+    try {
+      const savedSessionId = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+      if (savedSessionId) {
+        setSessionId(savedSessionId);
+        loadChatHistory(savedSessionId);
+      }
+    } catch (storageError) {
+      console.log('Unable to restore chat session ID:', storageError);
+    }
+  }, [loadChatHistory]);
 
   // Initialize with welcome message
   useEffect(() => {
@@ -43,146 +121,68 @@ const Chat = () => {
       };
       setMessages([welcomeMessage]);
     }
-  }, [user]);
-
-  const loadChatHistory = async () => {
-    if (!isAuthenticated) return;
-    
-    try {
-      const response = await request(() => chatService.getHistory());
-      if (response?.data?.length > 0) {
-        setMessages(response.data.reverse()); // Reverse to show oldest first
-        setChatStarted(true);
-      }
-    } catch (err) {
-      console.log('No chat history found or error loading:', err);
-    }
-  };
-
-  // Mock bot response generator
-  const generateBotResponse = (userMessage) => {
-    const message = userMessage.toLowerCase();
-    
-    // FAQ responses
-    if (message.includes('price') || message.includes('cost') || message.includes('how much')) {
-      return 'Tattoo pricing varies based on size, complexity, and style. Small tattoos start around $100-300, medium pieces $300-600, and larger work $600+. We provide detailed quotes during consultations. Would you like to book a free consultation?';
-    }
-    
-    if (message.includes('pain') || message.includes('hurt') || message.includes('painful')) {
-      return 'Pain levels vary by placement and individual tolerance. Areas with more muscle and fat (like arms, calves) tend to be less painful, while bony areas (ribs, ankles) can be more sensitive. We take breaks as needed and can discuss pain management techniques during your appointment.';
-    }
-    
-    if (message.includes('book') || message.includes('appointment') || message.includes('schedule')) {
-      return 'I\'d be happy to help you book an appointment! You can book online through our booking page, call us directly, or I can guide you through the process. What type of tattoo are you interested in?';
-    }
-    
-    if (message.includes('aftercare') || message.includes('healing') || message.includes('care')) {
-      return 'Proper aftercare is crucial! Keep it clean and moisturized, avoid soaking (showers are fine), no direct sunlight, and don\'t pick at scabs. We provide detailed aftercare instructions and recommend specific products. Healing typically takes 2-4 weeks for the surface.';
-    }
-    
-    if (message.includes('style') || message.includes('design') || message.includes('idea')) {
-      return 'We specialize in many styles including traditional, realism, tribal, geometric, watercolor, and more! Our AI design generator can help you visualize ideas, or browse our gallery for inspiration. What style interests you most?';
-    }
-    
-    if (message.includes('first tattoo') || message.includes('virgin skin') || message.includes('nervous')) {
-      return 'First tattoo? That\'s exciting! We\'re very experienced with first-timers. Start with something small to medium, choose a less sensitive area, and don\'t worry - we\'ll guide you through everything. Many clients find it much easier than expected!';
-    }
-    
-    if (message.includes('age') || message.includes('minor') || message.includes('years old')) {
-      return 'You must be 18+ to get tattooed, with valid ID required. We don\'t make exceptions for minors, even with parental consent, as per our studio policy and local regulations.';
-    }
-    
-    if (message.includes('color') || message.includes('black and grey') || message.includes('colours')) {
-      return 'We work with both color and black & grey tattoos! Color tattoos are vibrant and eye-catching but may require more sessions and touch-ups over time. Black and grey offers timeless elegance and often ages better. What style appeals to you?';
-    }
-    
-    if (message.includes('cover up') || message.includes('cover-up') || message.includes('old tattoo')) {
-      return 'We specialize in cover-up work! Successful cover-ups depend on the size, color, and age of the existing tattoo. Darker, larger designs work best for covering. We can often incorporate existing work into new designs. Book a consultation to discuss options!';
-    }
-    
-    if (message.includes('touch up') || message.includes('touch-up') || message.includes('free touch up')) {
-      return 'We offer free touch-ups within the first 6 months if needed, which is rare with proper aftercare. After that, touch-ups are available at a reduced rate. Most of our work heals beautifully without needing touch-ups!';
-    }
-    
-    if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
-      return 'Hello! Great to chat with you. I\'m here to answer any questions about tattoos, our services, or help you get started on your ink journey. What would you like to know?';
-    }
-    
-    if (message.includes('thank') || message.includes('thanks')) {
-      return 'You\'re very welcome! Feel free to ask if you have any other questions. We\'re here to help make your tattoo experience amazing!';
-    }
-    
-    if (message.includes('location') || message.includes('address') || message.includes('where')) {
-      return 'We\'re located in the heart of the city! You can find our exact address and directions on our contact page. We\'re easily accessible by public transport and have parking nearby.';
-    }
-    
-    if (message.includes('hours') || message.includes('open') || message.includes('closed')) {
-      return 'We\'re open Monday-Friday 9AM-5PM, and Saturday 10AM-6PM. We\'re closed Sundays to give our artists time to recharge. You can book appointments online 24/7 though!';
-    }
-    
-    // Default responses
-    const defaultResponses = [
-      'That\'s a great question! While I can help with basic information, I\'d recommend speaking with one of our artists for detailed advice. Would you like to book a consultation?',
-      'I\'d love to help you with that! For the best answer, you might want to discuss this during a consultation with our artists. They can provide personalized advice for your specific needs.',
-      'Thanks for asking! Our experienced artists would be the best people to give you detailed information about that. You can book a free consultation to discuss your ideas in detail.',
-      'That\'s an interesting question! Every situation is unique, so I\'d suggest booking a consultation where our artists can give you personalized advice and show you examples of their work.'
-    ];
-    
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
-  };
+  }, [user, messages.length]);
 
   const sendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || isTyping) {
+      return;
+    }
+
+    const trimmedMessage = newMessage.trim();
     
     const userMessage = {
       _id: Date.now().toString(),
-      message: newMessage.trim(),
+      message: trimmedMessage,
       sender: isAuthenticated ? 'user' : 'visitor',
       timestamp: new Date().toISOString()
     };
     
     setMessages(prev => [...prev, userMessage]);
+    setIsAtBottom(true);
     setNewMessage('');
     setIsTyping(true);
-    setChatStarted(true);
-    
-    // Save message if user is authenticated
-    if (isAuthenticated) {
-      try {
-        await request(() => chatService.sendMessage({
-          message: userMessage.message,
-          sender: 'user'
-        }));
-      } catch (err) {
-        console.log('Failed to save user message:', err);
+
+    try {
+      const response = await request(() => chatService.sendMessage({
+        message: userMessage.message,
+        sessionId: sessionId || undefined
+      }));
+
+      if (!response?.success) {
+        throw new Error(response?.error?.message || 'Failed to send chat message');
       }
-    }
-    
-    // Simulate bot typing delay
-    setTimeout(async () => {
-      const botResponseText = generateBotResponse(userMessage.message);
+
+      const payload = response?.data?.data;
+      if (!payload?.response) {
+        throw new Error('Invalid chat response payload');
+      }
+
+      if (payload.sessionId && payload.sessionId !== sessionId) {
+        persistSessionId(payload.sessionId);
+      }
+
       const botMessage = {
-        _id: (Date.now() + 1).toString(),
-        message: botResponseText,
+        _id: payload.messageId ? `${payload.messageId}-bot` : (Date.now() + 1).toString(),
+        message: payload.response,
         sender: 'bot',
-        timestamp: new Date().toISOString()
+        timestamp: payload.timestamp || new Date().toISOString()
       };
       
       setMessages(prev => [...prev, botMessage]);
+    } catch (sendError) {
+      console.error('Chat send failed:', sendError);
+
+      const fallbackMessage = {
+        _id: `${Date.now()}-fallback`,
+        message: 'Sorry, I had trouble responding just now. Please try again in a moment.',
+        sender: 'bot',
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, fallbackMessage]);
+    } finally {
       setIsTyping(false);
-      
-      // Save bot message if user is authenticated
-      if (isAuthenticated) {
-        try {
-          await request(() => chatService.sendMessage({
-            message: botMessage.message,
-            sender: 'bot'
-          }));
-        } catch (err) {
-          console.log('Failed to save bot message:', err);
-        }
-      }
-    }, 1000 + Math.random() * 2000); // 1-3 second delay
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -295,7 +295,7 @@ const Chat = () => {
                 )}
                 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map((message) => (
                     <div
                       key={message._id}

@@ -6,6 +6,37 @@ const generateSessionId = () => {
   return crypto.randomBytes(16).toString('hex');
 };
 
+const DEFAULT_SUMMARY_DAYS = 7;
+const DEFAULT_LOW_CONFIDENCE_THRESHOLD = 0.62;
+const DEFAULT_TOP_QUERY_LIMIT = 10;
+const DEFAULT_SAMPLE_LIMIT = 20;
+
+const parseBoundedInt = (value, fallback, min, max) => {
+  const parsedValue = Number.parseInt(value, 10);
+  if (Number.isNaN(parsedValue)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsedValue, min), max);
+};
+
+const parseBoundedFloat = (value, fallback, min, max) => {
+  const parsedValue = Number.parseFloat(value);
+  if (Number.isNaN(parsedValue)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsedValue, min), max);
+};
+
+const toPercentage = (numerator, denominator) => {
+  if (!denominator) {
+    return 0;
+  }
+
+  return Number(((numerator / denominator) * 100).toFixed(2));
+};
+
 // @desc    Send message to AI chatbot
 // @route   POST /api/chat
 // @access  Public
@@ -32,8 +63,25 @@ const sendMessage = async (req, res) => {
     const sessionId = providedSessionId || generateSessionId();
     const userId = req.user ? req.user.userId : null;
 
+    const sessionContextFilter = { sessionId };
+    if (userId) {
+      sessionContextFilter.userId = userId;
+    }
+
+    const previousSessionMessage = await ChatMessage.findOne(sessionContextFilter)
+      .sort({ createdAt: -1 })
+      .select('messageType confidence keywords');
+
+    const sessionContext = previousSessionMessage
+      ? {
+          lastIntent: previousSessionMessage.messageType,
+          lastConfidence: previousSessionMessage.confidence,
+          lastKeywords: previousSessionMessage.keywords || []
+        }
+      : {};
+
     // Generate AI response using rule-based logic
-    const aiResponse = ChatMessage.generateResponse(message);
+    const aiResponse = ChatMessage.generateResponse(message, sessionContext);
 
     // Save chat message
     const chatMessage = new ChatMessage({
@@ -448,6 +496,196 @@ const getChatAnalytics = async (req, res) => {
   }
 };
 
+// @desc    Get lightweight chatbot quality summary (admin only)
+// @route   GET /api/chat/admin/quality-summary
+// @access  Private (Admin)
+const getChatQualitySummary = async (req, res) => {
+  try {
+    const days = parseBoundedInt(req.query.days, DEFAULT_SUMMARY_DAYS, 1, 90);
+    const lowConfidenceThreshold = parseBoundedFloat(
+      req.query.lowConfidenceThreshold,
+      DEFAULT_LOW_CONFIDENCE_THRESHOLD,
+      0,
+      1
+    );
+    const topLimit = parseBoundedInt(req.query.topLimit, DEFAULT_TOP_QUERY_LIMIT, 1, 50);
+    const sampleLimit = parseBoundedInt(req.query.sampleLimit, DEFAULT_SAMPLE_LIMIT, 1, 100);
+
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - days);
+
+    const baseMatch = { createdAt: { $gte: sinceDate } };
+    const unresolvedMatch = {
+      ...baseMatch,
+      $or: [
+        { messageType: 'unknown' },
+        { confidence: { $lt: lowConfidenceThreshold } }
+      ]
+    };
+
+    const [
+      totalMessages,
+      qualityStatsResult,
+      topUnresolvedQueriesResult,
+      recentUnresolvedSamples
+    ] = await Promise.all([
+      ChatMessage.countDocuments(baseMatch),
+      ChatMessage.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: null,
+            unknownQueries: {
+              $sum: {
+                $cond: [{ $eq: ['$messageType', 'unknown'] }, 1, 0]
+              }
+            },
+            lowConfidenceQueries: {
+              $sum: {
+                $cond: [{ $lt: ['$confidence', lowConfidenceThreshold] }, 1, 0]
+              }
+            },
+            unresolvedQueries: {
+              $sum: {
+                $cond: [
+                  {
+                    $or: [
+                      { $eq: ['$messageType', 'unknown'] },
+                      { $lt: ['$confidence', lowConfidenceThreshold] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            avgConfidence: { $avg: '$confidence' },
+            ratedMessages: {
+              $sum: {
+                $cond: [{ $ne: ['$wasHelpful', null] }, 1, 0]
+              }
+            },
+            notHelpfulRatings: {
+              $sum: {
+                $cond: [{ $eq: ['$wasHelpful', false] }, 1, 0]
+              }
+            }
+          }
+        }
+      ]),
+      ChatMessage.aggregate([
+        { $match: unresolvedMatch },
+        {
+          $project: {
+            normalizedMessage: {
+              $trim: {
+                input: { $toLower: '$message' }
+              }
+            },
+            messageType: 1,
+            confidence: 1,
+            createdAt: 1
+          }
+        },
+        {
+          $match: {
+            normalizedMessage: { $ne: '' }
+          }
+        },
+        {
+          $group: {
+            _id: '$normalizedMessage',
+            count: { $sum: 1 },
+            unknownCount: {
+              $sum: {
+                $cond: [{ $eq: ['$messageType', 'unknown'] }, 1, 0]
+              }
+            },
+            lowConfidenceCount: {
+              $sum: {
+                $cond: [{ $lt: ['$confidence', lowConfidenceThreshold] }, 1, 0]
+              }
+            },
+            avgConfidence: { $avg: '$confidence' },
+            latestSeen: { $max: '$createdAt' }
+          }
+        },
+        { $sort: { count: -1, latestSeen: -1 } },
+        { $limit: topLimit },
+        {
+          $project: {
+            _id: 0,
+            query: '$_id',
+            count: 1,
+            unknownCount: 1,
+            lowConfidenceCount: 1,
+            avgConfidence: 1,
+            latestSeen: 1
+          }
+        }
+      ]),
+      ChatMessage.find(unresolvedMatch)
+        .sort({ createdAt: -1 })
+        .limit(sampleLimit)
+        .select('message response messageType confidence keywords wasHelpful createdAt sessionId')
+    ]);
+
+    const qualityStats = qualityStatsResult[0] || {
+      unknownQueries: 0,
+      lowConfidenceQueries: 0,
+      unresolvedQueries: 0,
+      avgConfidence: 0,
+      ratedMessages: 0,
+      notHelpfulRatings: 0
+    };
+
+    const topUnresolvedQueries = topUnresolvedQueriesResult.map((item) => ({
+      query: item.query,
+      count: item.count,
+      unknownCount: item.unknownCount,
+      lowConfidenceCount: item.lowConfidenceCount,
+      avgConfidence: Number((item.avgConfidence || 0).toFixed(3)),
+      latestSeen: item.latestSeen
+    }));
+
+    const now = new Date();
+    res.json({
+      success: true,
+      data: {
+        period: {
+          days,
+          since: sinceDate,
+          until: now
+        },
+        thresholds: {
+          lowConfidence: lowConfidenceThreshold
+        },
+        totals: {
+          totalMessages,
+          unknownQueries: qualityStats.unknownQueries,
+          lowConfidenceQueries: qualityStats.lowConfidenceQueries,
+          unresolvedQueries: qualityStats.unresolvedQueries,
+          unknownRatePct: toPercentage(qualityStats.unknownQueries, totalMessages),
+          lowConfidenceRatePct: toPercentage(qualityStats.lowConfidenceQueries, totalMessages),
+          unresolvedRatePct: toPercentage(qualityStats.unresolvedQueries, totalMessages),
+          avgConfidence: Number((qualityStats.avgConfidence || 0).toFixed(3)),
+          ratedMessages: qualityStats.ratedMessages,
+          notHelpfulRatings: qualityStats.notHelpfulRatings
+        },
+        topUnresolvedQueries,
+        recentUnresolvedSamples
+      }
+    });
+
+  } catch (error) {
+    console.error('Get chat quality summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching quality summary'
+    });
+  }
+};
+
 // @desc    Get all chat messages (admin only)
 // @route   GET /api/chat/admin/messages
 // @access  Private (Admin)
@@ -535,5 +773,6 @@ module.exports = {
   
   // Admin methods
   getChatAnalytics,
+  getChatQualitySummary,
   getAllMessages
 };

@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const { User } = require('../models');
+const { sendPasswordResetEmail } = require('../services/emailService');
 
 // Generate JWT Token
 const generateToken = (userId, role) => {
@@ -11,42 +11,6 @@ const generateToken = (userId, role) => {
     process.env.JWT_SECRET || 'fallback_secret_key',
     { expiresIn: '24h' }
   );
-};
-
-const getEmailTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-};
-
-const sendPasswordResetEmail = async (to, resetUrl) => {
-  const transporter = getEmailTransporter();
-  const from = process.env.EMAIL_FROM || 'no-reply@inkcraft.local';
-
-  await transporter.sendMail({
-    from,
-    to,
-    subject: 'InkCraft Password Reset',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Password Reset Request</h2>
-        <p>We received a request to reset your InkCraft account password.</p>
-        <p>Click the button below to set a new password. This link expires in 15 minutes.</p>
-        <p style="margin: 24px 0;">
-          <a href="${resetUrl}" style="background: #dc2626; color: #fff; text-decoration: none; padding: 12px 18px; border-radius: 6px; display: inline-block;">Reset Password</a>
-        </p>
-        <p>If the button does not work, copy and paste this URL into your browser:</p>
-        <p>${resetUrl}</p>
-        <p>If you did not request this, you can safely ignore this email.</p>
-      </div>
-    `
-  });
 };
 
 // @desc    Register a new user
@@ -373,7 +337,10 @@ const forgotPassword = async (req, res) => {
       const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
       try {
-        await sendPasswordResetEmail(user.email, resetUrl);
+        await sendPasswordResetEmail({
+          to: user.email,
+          resetUrl
+        });
       } catch (emailError) {
         user.resetPasswordToken = null;
         user.resetPasswordExpires = null;

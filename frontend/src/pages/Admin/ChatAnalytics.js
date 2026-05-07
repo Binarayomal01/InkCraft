@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useTheme } from '../../context/ThemeContext';
 import { chatService } from '../../services/api';
@@ -11,17 +11,35 @@ import Card from '../../components/UI/Card';
 
 const ChatAnalytics = () => {
   const [messages, setMessages] = useState([]);
-  const [filteredMessages, setFilteredMessages] = useState([]);
   const [selectedDateRange, setSelectedDateRange] = useState('week');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [analytics, setAnalytics] = useState({
     totalMessages: 0,
     activeConversations: 0,
-    avgResponseTime: 0,
+    avgResponseTime: null,
+    positiveSentimentPct: 0,
     topQuestions: [],
     hourlyDistribution: [],
     categoryBreakdown: []
+  });
+  const [qualitySummary, setQualitySummary] = useState({
+    period: { days: 7 },
+    thresholds: { lowConfidence: 0.62 },
+    totals: {
+      totalMessages: 0,
+      unknownQueries: 0,
+      lowConfidenceQueries: 0,
+      unresolvedQueries: 0,
+      unknownRatePct: 0,
+      lowConfidenceRatePct: 0,
+      unresolvedRatePct: 0,
+      avgConfidence: 0,
+      ratedMessages: 0,
+      notHelpfulRatings: 0
+    },
+    topUnresolvedQueries: [],
+    recentUnresolvedSamples: []
   });
   
   const { loading, error, request, clearError } = useApi();
@@ -35,7 +53,7 @@ const ChatAnalytics = () => {
   ];
 
   // Mock chat data for demonstration
-  const mockMessages = [
+  const mockMessages = useMemo(() => [
     {
       _id: '1',
       user: { _id: 'u1', name: 'John Smith', email: 'john@email.com' },
@@ -79,17 +97,17 @@ const ChatAnalytics = () => {
     {
       _id: '5',
       user: { _id: 'u5', name: 'Alex Rodriguez', email: 'alex@email.com' },
-      message: 'What\s your aftercare process?',
+      message: "What's your aftercare process?",
       response: 'We provide detailed aftercare instructions including cleaning guidelines, healing timeline, and products to use. Proper aftercare is crucial for the best results!',
       category: 'aftercare',
       sentiment: 'neutral',
       responseTime: 110,
       createdAt: '2026-02-08T13:30:00Z'
     }
-  ];
+  ], []);
 
   // Mock analytics data
-  const mockAnalytics = {
+  const mockAnalytics = useMemo(() => ({
     totalMessages: 247,
     activeConversations: 23,
     avgResponseTime: 92,
@@ -119,32 +137,137 @@ const ChatAnalytics = () => {
       { category: 'Services', count: 28, percentage: 18 },
       { category: 'Compliments', count: 16, percentage: 10 }
     ]
-  };
+  }), []);
+
+  const dateRangeToDays = useMemo(() => ({
+    today: 1,
+    week: 7,
+    month: 30,
+    quarter: 90
+  }), []);
+
+  const fetchChatData = useCallback(async () => {
+    try {
+      const selectedDays = dateRangeToDays[selectedDateRange] || 7;
+      const response = await request(async () => {
+        const [analyticsResponse, messagesResponse, qualityResponse] = await Promise.all([
+          chatService.getAnalytics({ range: selectedDateRange }),
+          chatService.getAllMessages({ page: 1, limit: 25 }),
+          chatService.getQualitySummary({
+            days: selectedDays,
+            lowConfidenceThreshold: 0.62,
+            topLimit: 10,
+            sampleLimit: 12
+          })
+        ]);
+
+        return {
+          data: {
+            analytics: analyticsResponse.data,
+            messages: messagesResponse.data,
+            quality: qualityResponse.data
+          }
+        };
+      });
+
+      if (!response?.success) {
+        return;
+      }
+
+      const analyticsPayload = response?.data?.analytics?.data || {};
+      const messagesPayload = response?.data?.messages?.data?.messages || [];
+      const qualityPayload = response?.data?.quality?.data || {};
+
+      const helpful = analyticsPayload?.helpfulnessStats?.helpful || 0;
+      const notHelpful = analyticsPayload?.helpfulnessStats?.notHelpful || 0;
+      const totalRatings = helpful + notHelpful;
+
+      setAnalytics({
+        totalMessages: analyticsPayload.totalMessages || 0,
+        activeConversations: analyticsPayload?.sessionStats?.totalSessions || 0,
+        avgResponseTime: null,
+        positiveSentimentPct: totalRatings > 0 ? Number(((helpful / totalRatings) * 100).toFixed(1)) : 0,
+        topQuestions: (analyticsPayload.keywordStats || []).slice(0, 5).map((item) => ({
+          question: item._id,
+          count: item.count
+        })),
+        hourlyDistribution: (analyticsPayload.dailyStats || []).slice(-10).map((item) => ({
+          hour: item._id,
+          messages: item.count
+        })),
+        categoryBreakdown: (analyticsPayload.messageTypes || []).map((item) => ({
+          category: (item._id || 'unknown').replace(/_/g, ' '),
+          count: item.count,
+          percentage: analyticsPayload.totalMessages
+            ? Number(((item.count / analyticsPayload.totalMessages) * 100).toFixed(1))
+            : 0
+        }))
+      });
+
+      setMessages(messagesPayload.map((item) => ({
+        ...item,
+        user: item.userId
+          ? {
+              _id: item.userId._id,
+              name: item.userId.name || 'Registered User',
+              email: item.userId.email || 'N/A'
+            }
+          : {
+              _id: 'guest',
+              name: 'Guest User',
+              email: 'Anonymous'
+            },
+        category: item.messageType || 'general',
+        sentiment: item.wasHelpful === true ? 'positive' : item.wasHelpful === false ? 'negative' : 'neutral',
+        responseTime: null
+      })));
+
+      setQualitySummary({
+        period: qualityPayload.period || { days: selectedDays },
+        thresholds: qualityPayload.thresholds || { lowConfidence: 0.62 },
+        totals: qualityPayload.totals || {
+          totalMessages: 0,
+          unknownQueries: 0,
+          lowConfidenceQueries: 0,
+          unresolvedQueries: 0,
+          unknownRatePct: 0,
+          lowConfidenceRatePct: 0,
+          unresolvedRatePct: 0,
+          avgConfidence: 0,
+          ratedMessages: 0,
+          notHelpfulRatings: 0
+        },
+        topUnresolvedQueries: qualityPayload.topUnresolvedQueries || [],
+        recentUnresolvedSamples: qualityPayload.recentUnresolvedSamples || []
+      });
+    } catch (err) {
+      console.log('Using mock data for chat analytics:', err);
+      setMessages(mockMessages);
+      setAnalytics(mockAnalytics);
+      setQualitySummary({
+        period: { days: 7 },
+        thresholds: { lowConfidence: 0.62 },
+        totals: {
+          totalMessages: mockAnalytics.totalMessages,
+          unknownQueries: 0,
+          lowConfidenceQueries: 0,
+          unresolvedQueries: 0,
+          unknownRatePct: 0,
+          lowConfidenceRatePct: 0,
+          unresolvedRatePct: 0,
+          avgConfidence: 0,
+          ratedMessages: 0,
+          notHelpfulRatings: 0
+        },
+        topUnresolvedQueries: [],
+        recentUnresolvedSamples: []
+      });
+    }
+  }, [request, selectedDateRange, dateRangeToDays, mockAnalytics, mockMessages]);
 
   useEffect(() => {
     fetchChatData();
-  }, [selectedDateRange]);
-
-  const fetchChatData = async () => {
-    try {
-      const response = await request(() => chatService.getAnalytics(selectedDateRange));
-      if (response?.data) {
-        setMessages(response.data.messages || []);
-        setAnalytics(response.data.analytics || {});
-      } else {
-        setMessages(mockMessages);
-        setAnalytics(mockAnalytics);
-      }
-    } catch (err) {
-      console.log('Using mock data for chat analytics');
-      setMessages(mockMessages);
-      setAnalytics(mockAnalytics);
-    }
-  };
-
-  useEffect(() => {
-    setFilteredMessages(messages);
-  }, [messages]);
+  }, [fetchChatData]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -157,10 +280,18 @@ const ChatAnalytics = () => {
   };
 
   const formatResponseTime = (seconds) => {
+    if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+      return 'N/A';
+    }
+
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}m ${remainingSeconds}s`;
+  };
+
+  const formatCategory = (category) => {
+    return (category || 'general').replace(/[_-]/g, ' ');
   };
 
   const getSentimentColor = (sentiment) => {
@@ -172,14 +303,20 @@ const ChatAnalytics = () => {
   };
 
   const getCategoryColor = (category) => {
+    const normalizedCategory = (category || 'general').replace(/\s+/g, '_').toLowerCase();
     const colors = {
       'first-time': 'bg-blue-100 text-blue-800',
       'pricing': 'bg-yellow-100 text-yellow-800',
       'services': 'bg-purple-100 text-purple-800',
       'aftercare': 'bg-green-100 text-green-800',
-      'compliment': 'bg-pink-100 text-pink-800'
+      'compliment': 'bg-pink-100 text-pink-800',
+      'booking_faq': 'bg-blue-100 text-blue-800',
+      'studio_info': 'bg-indigo-100 text-indigo-800',
+      'greeting': 'bg-cyan-100 text-cyan-800',
+      'general': 'bg-gray-100 text-gray-800',
+      'unknown': 'bg-red-100 text-red-800'
     };
-    return colors[category] || 'bg-gray-100 text-gray-800';
+    return colors[normalizedCategory] || 'bg-gray-100 text-gray-800';
   };
 
   const handleMessageClick = (message) => {
@@ -248,12 +385,78 @@ const ChatAnalytics = () => {
             <Card>
               <div className="text-center">
                 <div className="text-3xl font-bold text-gold-400">
-                  {((analytics.categoryBreakdown?.find(c => c.category === 'Compliments')?.count || 0) / (analytics.totalMessages || 1) * 100).toFixed(1)}%
+                  {analytics.positiveSentimentPct || 0}%
                 </div>
                 <div className="text-sm text-gold-300 mt-1">Positive Sentiment</div>
               </div>
             </Card>
           </div>
+
+          <Card title={`Bot Quality Summary (Last ${qualitySummary.period?.days || 7} Days)`}>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-dark-800 border border-dark-700 rounded-lg p-4">
+                <p className="text-xs uppercase tracking-wide text-gold-400">Unknown Rate</p>
+                <p className="text-2xl font-bold text-white mt-1">{qualitySummary.totals?.unknownRatePct || 0}%</p>
+                <p className="text-xs text-gold-300 mt-1">{qualitySummary.totals?.unknownQueries || 0} queries</p>
+              </div>
+              <div className="bg-dark-800 border border-dark-700 rounded-lg p-4">
+                <p className="text-xs uppercase tracking-wide text-gold-400">Low Confidence Rate</p>
+                <p className="text-2xl font-bold text-white mt-1">{qualitySummary.totals?.lowConfidenceRatePct || 0}%</p>
+                <p className="text-xs text-gold-300 mt-1">{qualitySummary.totals?.lowConfidenceQueries || 0} queries</p>
+              </div>
+              <div className="bg-dark-800 border border-dark-700 rounded-lg p-4">
+                <p className="text-xs uppercase tracking-wide text-gold-400">Unresolved Rate</p>
+                <p className="text-2xl font-bold text-white mt-1">{qualitySummary.totals?.unresolvedRatePct || 0}%</p>
+                <p className="text-xs text-gold-300 mt-1">{qualitySummary.totals?.unresolvedQueries || 0} queries</p>
+              </div>
+              <div className="bg-dark-800 border border-dark-700 rounded-lg p-4">
+                <p className="text-xs uppercase tracking-wide text-gold-400">Avg Confidence</p>
+                <p className="text-2xl font-bold text-white mt-1">{qualitySummary.totals?.avgConfidence || 0}</p>
+                <p className="text-xs text-gold-300 mt-1">Threshold: {qualitySummary.thresholds?.lowConfidence || 0.62}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold text-gold-300 mb-3">Top Unresolved Queries</h3>
+                {qualitySummary.topUnresolvedQueries?.length > 0 ? (
+                  <div className="space-y-2">
+                    {qualitySummary.topUnresolvedQueries.map((item, index) => (
+                      <div key={`${item.query}-${index}`} className="bg-dark-800 border border-dark-700 rounded-lg p-3">
+                        <p className="text-sm text-white">{item.query}</p>
+                        <div className="mt-2 flex items-center justify-between text-xs text-gold-300">
+                          <span>Count: {item.count}</span>
+                          <span>Avg conf: {item.avgConfidence}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gold-300">No unresolved query patterns in this period.</p>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gold-300 mb-3">Recent Unresolved Samples</h3>
+                {qualitySummary.recentUnresolvedSamples?.length > 0 ? (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {qualitySummary.recentUnresolvedSamples.map((item) => (
+                      <div key={item._id} className="bg-dark-800 border border-dark-700 rounded-lg p-3">
+                        <p className="text-xs text-gold-400">{formatDate(item.createdAt)}</p>
+                        <p className="text-sm text-white mt-1">{item.message}</p>
+                        <div className="mt-2 flex items-center justify-between text-xs text-gold-300">
+                          <span className="capitalize">{formatCategory(item.messageType)}</span>
+                          <span>Conf: {item.confidence}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gold-300">No recent unresolved samples for this period.</p>
+                )}
+              </div>
+            </div>
+          </Card>
 
           {/* Charts and Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -333,7 +536,7 @@ const ChatAnalytics = () => {
                       <div className="flex items-center space-x-3">
                         <div className="font-medium text-white">{message.user?.name}</div>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getCategoryColor(message.category)}`}>
-                          {message.category.replace('-', ' ')}
+                          {formatCategory(message.category)}
                         </span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getSentimentColor(message.sentiment)}`}>
                           {message.sentiment}
@@ -421,7 +624,7 @@ const ChatAnalytics = () => {
                     <div className="bg-dark-800 border border-dark-700 rounded-lg p-4">
                       <p className="text-sm font-medium text-gold-400 mb-1">Category</p>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize ${getCategoryColor(selectedMessage.category)}`}>
-                        {selectedMessage.category.replace('-', ' ')}
+                        {formatCategory(selectedMessage.category)}
                       </span>
                     </div>
                     

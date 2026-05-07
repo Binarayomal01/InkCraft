@@ -55,6 +55,11 @@ const bookingSchema = new mongoose.Schema({
     required: [true, 'Preferred date is required'],
     validate: {
       validator: function(date) {
+        // Only enforce future-date constraint when creating a booking
+        // or when the preferred date itself is being edited.
+        if (!this.isNew && !this.isModified('preferredDate')) {
+          return true;
+        }
         return date > new Date();
       },
       message: 'Preferred date must be in the future'

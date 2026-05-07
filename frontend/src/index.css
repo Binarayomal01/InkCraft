@@ -227,7 +227,11 @@
   }
   
   .nav-link-active {
-    @apply text-gold-500 font-bold;
+    @apply text-gold-500 font-semibold bg-gold-500/15 px-3 py-1 rounded-full;
+  }
+
+  .nav-link-active::after {
+    @apply w-full;
   }
   
   /* ========== BACKGROUNDS ========== */
@@ -309,7 +313,8 @@
   }
   
   .container-max {
-    @apply max-w-7xl mx-auto;
+    @apply mx-auto w-full;
+    max-width: 90rem;
   }
   
   /* ========== EFFECTS ========== */

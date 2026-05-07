@@ -604,6 +604,23 @@ const Dashboard = () => {
                               isDark ? 'text-gray-400' : 'text-secondary-700'
                             }`}>{booking.tattooIdea}</p>
                           </div>
+
+                          {booking.status === 'rejected' && booking.rejectionReason && (
+                            <div className={`mt-3 p-3 rounded-lg border ${
+                              isDark ? 'bg-red-950/40 border-red-700/60' : 'bg-red-50 border-red-200'
+                            }`}>
+                              <p className={`text-xs font-semibold mb-1 ${
+                                isDark ? 'text-red-200' : 'text-red-700'
+                              }`}>
+                                Rejection Reason
+                              </p>
+                              <p className={`text-sm ${
+                                isDark ? 'text-red-100' : 'text-red-800'
+                              }`}>
+                                {booking.rejectionReason}
+                              </p>
+                            </div>
+                          )}
                         </div>
 
                         {/* Cancel Button for Pending/Approved Bookings */}
@@ -825,10 +842,23 @@ const Dashboard = () => {
                 <p className="mt-1 text-sm text-secondary-900">{selectedBooking.tattooIdea}</p>
               </div>
               
-              {selectedBooking.specialRequests && (
+              {(selectedBooking.notes || selectedBooking.specialRequests) && (
                 <div>
                   <span className="text-secondary-600">Special Requests:</span>
-                  <p className="mt-1 text-sm text-secondary-900">{selectedBooking.specialRequests}</p>
+                  <p className="mt-1 text-sm text-secondary-900">{selectedBooking.notes || selectedBooking.specialRequests}</p>
+                </div>
+              )}
+
+              {selectedBooking.status === 'rejected' && selectedBooking.rejectionReason && (
+                <div className={`rounded-lg p-4 border ${
+                  isDark ? 'bg-red-950/40 border-red-700/60' : 'bg-red-50 border-red-200'
+                }`}>
+                  <h4 className={`font-medium mb-2 ${
+                    isDark ? 'text-red-200' : 'text-red-900'
+                  }`}>Rejection Reason</h4>
+                  <p className={`text-sm ${
+                    isDark ? 'text-red-100' : 'text-red-700'
+                  }`}>{selectedBooking.rejectionReason}</p>
                 </div>
               )}
             </div>

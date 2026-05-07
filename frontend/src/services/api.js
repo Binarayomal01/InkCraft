@@ -75,10 +75,26 @@ export const tattooDesignService = {
 
 // Chat service
 export const chatService = {
-  sendMessage: (messageData) => api.post('/chat', messageData),
-  getHistory: () => api.get('/chat/history'),
-  deleteHistory: () => api.delete('/chat/history'),
-  getAnalytics: (dateRange) => api.get(`/chat/admin/analytics?range=${dateRange}`),
+  sendMessage: (messageDataOrMessage, sessionId) => {
+    const payload = typeof messageDataOrMessage === 'string'
+      ? { message: messageDataOrMessage, sessionId }
+      : messageDataOrMessage;
+
+    return api.post('/chat', payload);
+  },
+  getHistory: (sessionId, params = {}) => api.get(`/chat/history/${sessionId}`, { params }),
+  rateResponse: (messageId, helpful) => api.post(`/chat/${messageId}/rate`, { helpful }),
+  getQuickReplies: () => api.get('/chat/suggestions'),
+  getUserSessions: (params = {}) => api.get('/chat/my-sessions', { params }),
+  getAnalytics: (dateRangeOrParams) => {
+    const params = typeof dateRangeOrParams === 'string'
+      ? { range: dateRangeOrParams }
+      : (dateRangeOrParams || {});
+
+    return api.get('/chat/admin/analytics', { params });
+  },
+  getQualitySummary: (params = {}) => api.get('/chat/admin/quality-summary', { params }),
+  getAllMessages: (params = {}) => api.get('/chat/admin/messages', { params }),
 };
 
 // Admin services
