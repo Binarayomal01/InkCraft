@@ -7,8 +7,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        'body': ['Montserrat', 'sans-serif'],
-        'display': ['Creepster', 'cursive'],
+        'body': ['Inter', 'sans-serif'],
+        'display': ['Oswald', 'sans-serif'],
         'accent': ['Permanent Marker', 'cursive'],
       },
       colors: {

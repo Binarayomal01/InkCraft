@@ -954,12 +954,25 @@ const Dashboard = () => {
               </div>
               
               {selectedDesign.aiGenerated && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div
+                  className={`rounded-lg border p-4 ${
+                    isDark
+                      ? 'bg-dark-800/80 border-gold-500/30'
+                      : 'bg-purple-100 border-purple-200'
+                  }`}
+                >
                   <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg
+                      className={`w-5 h-5 ${isDark ? 'text-gold-300' : 'text-purple-700'}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    <h4 className="font-medium text-purple-900">AI Generated Design</h4>
+                    <h4 className={`font-medium ${isDark ? 'text-gold-200' : 'text-purple-900'}`}>
+                      AI Generated Design
+                    </h4>
                   </div>
                 </div>
               )}
