@@ -234,6 +234,12 @@ PORT=5000
 MONGODB_URI=mongodb://localhost:27017/inkcraft
 JWT_SECRET=your_jwt_secret
 FRONTEND_URL=http://localhost:3000
+EMAIL_ENABLED=true
+EMAIL_HOST=sandbox.smtp.mailtrap.io
+EMAIL_PORT=2525
+EMAIL_USER=your_smtp_username
+EMAIL_PASS=your_smtp_password
+EMAIL_FROM="InkCraft <no-reply@inkcraft.local>"
 ```
 
 ### Frontend (.env)
@@ -310,7 +316,7 @@ This project is created for educational purposes - university assignment.
 **Students Name**: [Your Name]  
 **University**: [Your University]  
 **Course**: [Course Name]  
-**Year**: 2024
+**Year**: 2025
 
 ---
 
