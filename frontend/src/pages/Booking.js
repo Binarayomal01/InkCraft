@@ -615,14 +615,16 @@ const Booking = () => {
                   </div>
                 )}
                 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className={`rounded-lg border p-4 ${
+                  isDark ? 'bg-dark-800 border-dark-700' : 'bg-blue-50 border-blue-200'
+                }`}>
                   <div className="flex items-start space-x-3">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`w-5 h-5 mt-0.5 ${isDark ? 'text-gold-400' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <div className="text-sm text-blue-800">
-                      <p className="font-medium mb-1">Booking Information</p>
-                      <ul className="space-y-1 text-blue-700">
+                    <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-blue-800'}`}>
+                      <p className={`font-semibold mb-1 ${isDark ? 'text-gold-300' : 'text-blue-800'}`}>Booking Information</p>
+                      <ul className={`space-y-1 ${isDark ? 'text-gray-300' : 'text-blue-700'}`}>
                         <li>• Initial consultations are free and typically last 30-60 minutes</li>
                         <li>• We'll discuss your design, pricing, and schedule the tattoo session</li>
                         <li>• Studio hours: Mon-Fri 9AM-5PM, Sat 10AM-6PM, Closed Sundays</li>
