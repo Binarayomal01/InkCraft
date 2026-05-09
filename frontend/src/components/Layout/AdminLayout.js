@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { adminService, tattooDesignService } from '../../services/api';
 import Button from '../UI/Button';
 
 const AdminLayout = () => {
@@ -10,11 +11,122 @@ const AdminLayout = () => {
   const { isDark } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const notificationPanelRef = useRef(null);
+  const notificationSeenKey = useMemo(() => 'inkcraft_admin_notifications_seen', []);
 
   const handleLogout = () => {
     logout();
     navigate('/');
   };
+
+  const parseSeenCounts = () => {
+    try {
+      const raw = localStorage.getItem(notificationSeenKey);
+      if (!raw) return { pendingBookings: 0, pendingGallery: 0 };
+      const parsed = JSON.parse(raw);
+      return {
+        pendingBookings: Number(parsed.pendingBookings) || 0,
+        pendingGallery: Number(parsed.pendingGallery) || 0
+      };
+    } catch (error) {
+      return { pendingBookings: 0, pendingGallery: 0 };
+    }
+  };
+
+  const markNotificationsAsRead = (counts) => {
+    localStorage.setItem(notificationSeenKey, JSON.stringify(counts));
+    setUnreadNotificationCount(0);
+  };
+
+  const handleNotificationToggle = () => {
+    setIsNotificationOpen((previous) => {
+      const willOpen = !previous;
+      if (willOpen && notifications.length > 0) {
+        const currentCounts = notifications.reduce((acc, item) => {
+          if (item.id === 'pending-bookings') acc.pendingBookings = item.count;
+          if (item.id === 'pending-gallery') acc.pendingGallery = item.count;
+          return acc;
+        }, { pendingBookings: 0, pendingGallery: 0 });
+        markNotificationsAsRead(currentCounts);
+      }
+      return willOpen;
+    });
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (notificationPanelRef.current && !notificationPanelRef.current.contains(event.target)) {
+        setIsNotificationOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let intervalId;
+
+    const loadNotifications = async () => {
+      try {
+        const [statsResponse, galleryResponse] = await Promise.all([
+          adminService.getStats('week'),
+          tattooDesignService.adminGetGallerySubmissions({ status: 'pending', limit: 1 })
+        ]);
+
+        const pendingBookings = Number(statsResponse?.data?.data?.pendingBookings) || 0;
+        const pendingGallery = Number(galleryResponse?.data?.data?.pagination?.totalDesigns) || 0;
+
+        const nextNotifications = [];
+        if (pendingBookings > 0) {
+          nextNotifications.push({
+            id: 'pending-bookings',
+            title: 'Pending bookings',
+            message: `${pendingBookings} booking(s) awaiting review`,
+            link: '/admin/bookings',
+            count: pendingBookings
+          });
+        }
+        if (pendingGallery > 0) {
+          nextNotifications.push({
+            id: 'pending-gallery',
+            title: 'Gallery submissions',
+            message: `${pendingGallery} AI design(s) awaiting approval`,
+            link: '/admin/designs',
+            count: pendingGallery
+          });
+        }
+
+        if (!isMounted) return;
+
+        setNotifications(nextNotifications);
+
+        const seen = parseSeenCounts();
+        const unreadCount = Math.max(0, pendingBookings - seen.pendingBookings)
+          + Math.max(0, pendingGallery - seen.pendingGallery);
+
+        setUnreadNotificationCount(unreadCount);
+      } catch (error) {
+        if (isMounted) {
+          console.error('Failed to load admin notifications:', error);
+          setNotifications([]);
+          setUnreadNotificationCount(0);
+        }
+      }
+    };
+
+    loadNotifications();
+    intervalId = setInterval(loadNotifications, 60000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [notificationSeenKey]);
 
   const sidebarItems = [
     {
@@ -183,11 +295,69 @@ const AdminLayout = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            
-            <div className={`text-sm ${
-              isDark ? 'text-gold-300' : 'text-secondary-600'
-            }`}>
-              Welcome back, <span className="font-medium">{user?.name}</span>
+
+            <div className="relative flex items-center space-x-4" ref={notificationPanelRef}>
+              <button
+                type="button"
+                onClick={handleNotificationToggle}
+                className={`relative rounded-lg p-2 transition-colors ${
+                  isDark ? 'hover:bg-dark-800 text-gold-400' : 'hover:bg-secondary-100 text-secondary-600'
+                }`}
+                aria-label="Admin notifications"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">
+                    {unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationOpen && (
+                <div className={`absolute right-0 top-12 w-72 rounded-lg border shadow-xl ${
+                  isDark ? 'border-dark-700 bg-dark-900' : 'border-gray-200 bg-white'
+                }`}>
+                  <div className={`px-4 py-3 text-sm font-semibold ${
+                    isDark ? 'text-gold-300' : 'text-gray-700'
+                  }`}>
+                    Admin notifications
+                  </div>
+                  <div className={`border-t ${isDark ? 'border-dark-700' : 'border-gray-200'}`}>
+                    {notifications.length === 0 ? (
+                      <div className={`px-4 py-4 text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
+                        No new notifications.
+                      </div>
+                    ) : (
+                      notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setIsNotificationOpen(false);
+                            navigate(item.link);
+                          }}
+                          className={`w-full px-4 py-3 text-left text-sm transition-colors ${
+                            isDark ? 'text-gold-200 hover:bg-dark-800' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="font-medium">{item.title}</div>
+                          <div className={`text-xs ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                            {item.message}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className={`text-sm ${
+                isDark ? 'text-gold-300' : 'text-secondary-600'
+              }`}>
+                Welcome back, <span className="font-medium">{user?.name}</span>
+              </div>
             </div>
           </div>
         </header>

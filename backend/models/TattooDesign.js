@@ -130,6 +130,19 @@ const tattooDesignSchema = new mongoose.Schema({
     type: Boolean,
     default: false // Only featured public designs appear in gallery
   },
+  gallerySubmissionStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected'],
+    default: 'none'
+  },
+  gallerySubmittedAt: {
+    type: Date,
+    default: null
+  },
+  galleryReviewedAt: {
+    type: Date,
+    default: null
+  },
   artist: {
     type: String,
     default: 'InkCraft Studio'

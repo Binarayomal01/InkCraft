@@ -1074,6 +1074,125 @@ const deleteDesign = async (req, res) => {
   }
 };
 
+// @desc    Get pending gallery submissions (admin only)
+// @route   GET /api/tattoo-designs/admin/gallery-submissions
+// @access  Private (Admin)
+const getGallerySubmissions = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 25,
+      status = 'pending',
+      sortBy = 'gallerySubmittedAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const parsedLimit = Math.max(1, Math.min(200, parseInt(limit, 10) || 25));
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const filter = {
+      isActive: true,
+      isGalleryDesign: false
+    };
+
+    if (status && status !== 'all') {
+      filter.gallerySubmissionStatus = status;
+    }
+
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const designs = await TattooDesign.find(filter)
+      .populate('createdBy', 'name email')
+      .sort(sortObj)
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('-likes')
+      .lean();
+
+    const designsWithOptimizedImages = await Promise.all(
+      designs.map((design) => optimizeDesignListItem(design, false))
+    );
+
+    const totalDesigns = await TattooDesign.countDocuments(filter);
+    const totalPages = Math.ceil(totalDesigns / parsedLimit);
+
+    res.json({
+      success: true,
+      data: {
+        designs: designsWithOptimizedImages,
+        pagination: {
+          currentPage: parsedPage,
+          totalPages,
+          totalDesigns,
+          hasNext: parsedPage < totalPages,
+          hasPrev: parsedPage > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get gallery submissions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching gallery submissions'
+    });
+  }
+};
+
+// @desc    Approve or reject a gallery submission (admin only)
+// @route   PUT /api/tattoo-designs/admin/:id/gallery-approval
+// @access  Private (Admin)
+const reviewGallerySubmission = async (req, res) => {
+  try {
+    const { decision } = req.body;
+    const normalizedDecision = typeof decision === 'string' ? decision.trim().toLowerCase() : '';
+
+    if (!['approved', 'rejected'].includes(normalizedDecision)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Decision must be approved or rejected'
+      });
+    }
+
+    const design = await TattooDesign.findById(req.params.id).populate('createdBy', 'name email');
+
+    if (!design) {
+      return res.status(404).json({
+        success: false,
+        message: 'Design not found'
+      });
+    }
+
+    if (design.gallerySubmissionStatus !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Design is not pending gallery approval'
+      });
+    }
+
+    design.gallerySubmissionStatus = normalizedDecision;
+    design.galleryReviewedAt = new Date();
+    design.isGalleryDesign = normalizedDecision === 'approved';
+
+    await design.save();
+
+    res.json({
+      success: true,
+      message: `Gallery submission ${normalizedDecision}`,
+      data: {
+        design
+      }
+    });
+  } catch (error) {
+    console.error('Review gallery submission error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while reviewing gallery submission'
+    });
+  }
+};
+
 // @desc    Get user's liked designs
 // @route   GET /api/tattoo-designs/user/liked
 // @access  Private
@@ -1299,7 +1418,9 @@ module.exports = {
   // Admin methods
   createDesign,
   updateDesign,
-  deleteDesign
+  deleteDesign,
+  getGallerySubmissions,
+  reviewGallerySubmission
 };
 
 const buildThumbnailDataUri = async (imageUrl) => {

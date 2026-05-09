@@ -14,6 +14,7 @@ const BookingManagement = () => {
   const [bookings, setBookings] = useState([]);
   const [filteredBookings, setFilteredBookings] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedTimeFilter, setSelectedTimeFilter] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -38,6 +39,13 @@ const BookingManagement = () => {
     { value: 'rejected', label: 'Rejected' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' }
+  ];
+
+  const timeFilterOptions = [
+    { value: 'all', label: 'All Time' },
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' },
+    { value: 'quarter', label: 'This Quarter' }
   ];
 
   // Mock bookings data for demonstration
@@ -110,30 +118,27 @@ const BookingManagement = () => {
   // Fetch bookings
   const fetchBookings = async () => {
     try {
-      const response = await request(() => bookingService.getAll());
+      const response = await request(() => bookingService.getAll({
+        status: selectedStatus,
+        timeFilter: selectedTimeFilter
+      }));
       if (response?.data?.data?.bookings) {
         setBookings(response.data.data.bookings);
+        setFilteredBookings(response.data.data.bookings);
       } else {
         setBookings(mockBookings);
+        setFilteredBookings(mockBookings);
       }
     } catch (err) {
       console.log('Using mock data for bookings');
       setBookings(mockBookings);
+      setFilteredBookings(mockBookings);
     }
   };
 
   useEffect(() => {
     fetchBookings();
-  }, []);
-
-  // Filter bookings by status
-  useEffect(() => {
-    if (selectedStatus === 'all') {
-      setFilteredBookings(bookings);
-    } else {
-      setFilteredBookings(bookings.filter(booking => booking.status === selectedStatus));
-    }
-  }, [selectedStatus, bookings]);
+  }, [selectedStatus, selectedTimeFilter]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -297,11 +302,20 @@ const BookingManagement = () => {
               options={statusOptions}
             />
           </div>
+          <div className="flex-1">
+            <Select
+              label="Filter by Time"
+              value={selectedTimeFilter}
+              onChange={(e) => setSelectedTimeFilter(e.target.value)}
+              options={timeFilterOptions}
+            />
+          </div>
           <div className="flex items-end">
             <Button
               variant="outline"
               onClick={() => {
                 setSelectedStatus('all');
+                setSelectedTimeFilter('all');
                 fetchBookings();
               }}
             >

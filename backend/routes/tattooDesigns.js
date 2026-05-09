@@ -45,6 +45,11 @@ router.delete('/user/:id', authenticateToken, asyncHandler(tattooDesignControlle
 // @access  Private (Admin)
 router.get('/admin', authenticateToken, requireAdmin, asyncHandler(tattooDesignController.getAllDesignsAdmin));
 
+// @desc    Get gallery submission queue
+// @route   GET /api/tattoo-designs/admin/gallery-submissions
+// @access  Private (Admin)
+router.get('/admin/gallery-submissions', authenticateToken, requireAdmin, asyncHandler(tattooDesignController.getGallerySubmissions));
+
 // @desc    Get design by ID
 // @route   GET /api/tattoo-designs/:id
 // @access  Public (private designs require owner/admin)
@@ -118,6 +123,11 @@ router.post('/admin/test', authenticateToken, requireAdmin, asyncHandler(async (
 // @route   PUT /api/tattoo-designs/admin/:id
 // @access  Private (Admin)
 router.put('/admin/:id', authenticateToken, requireAdmin, generalRateLimit, asyncHandler(tattooDesignController.updateDesign));
+
+// @desc    Approve or reject gallery submission
+// @route   PUT /api/tattoo-designs/admin/:id/gallery-approval
+// @access  Private (Admin)
+router.put('/admin/:id/gallery-approval', authenticateToken, requireAdmin, generalRateLimit, asyncHandler(tattooDesignController.reviewGallerySubmission));
 
 // @desc    Delete a design (admin only)
 // @route   DELETE /api/tattoo-designs/admin/:id

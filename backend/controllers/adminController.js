@@ -35,8 +35,10 @@ const getDashboardStats = async (req, res) => {
     // Get pending bookings count
     const pendingBookings = await Booking.countDocuments({ status: 'pending' });
     
-    // Get recent bookings (last 5)
-    const recentBookings = await Booking.find()
+    // Get recent bookings (last 5 within selected period)
+    const recentBookings = await Booking.find({
+      createdAt: { $gte: dateThreshold }
+    })
       .sort({ createdAt: -1 })
       .limit(5)
       .populate('userId', 'name email')
@@ -54,8 +56,10 @@ const getDashboardStats = async (req, res) => {
       estimatedPrice: booking.estimatedPrice
     }));
     
-    // Get recent users (last 5)
-    const recentUsers = await User.find()
+    // Get recent users (last 5 within selected period)
+    const recentUsers = await User.find({
+      createdAt: { $gte: dateThreshold }
+    })
       .sort({ createdAt: -1 })
       .limit(5)
       .select('name email createdAt role')

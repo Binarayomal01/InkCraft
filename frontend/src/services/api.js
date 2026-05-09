@@ -53,7 +53,7 @@ export const bookingService = {
   update: (id, data) => api.put(`/bookings/${id}`, data),
   delete: (id) => api.delete(`/bookings/${id}`),
   // Admin endpoints
-  getAll: () => api.get('/bookings/admin/all?limit=1000'),
+  getAll: (params = {}) => api.get('/bookings/admin/all', { params: { limit: 1000, ...params } }),
   updateStatus: (id, statusData) => api.put(`/bookings/admin/${id}/status`, statusData),
   getStats: () => api.get('/bookings/admin/stats'),
 };
@@ -71,6 +71,8 @@ export const tattooDesignService = {
   adminGetAll: () => api.get('/tattoo-designs/admin?limit=1000'),
   adminCreate: (designData) => api.post('/tattoo-designs/admin', designData),
   adminDelete: (id) => api.delete(`/tattoo-designs/admin/${id}`),
+  adminGetGallerySubmissions: (params = {}) => api.get('/tattoo-designs/admin/gallery-submissions', { params }),
+  adminReviewGallerySubmission: (id, decision) => api.put(`/tattoo-designs/admin/${id}/gallery-approval`, { decision }),
 };
 
 // Chat service

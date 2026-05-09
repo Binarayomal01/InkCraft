@@ -21,6 +21,7 @@ const Booking = () => {
   const [bookingId, setBookingId] = useState(null);
   const [linkedDesign, setLinkedDesign] = useState(null);
   const [isLoadingLinkedDesign, setIsLoadingLinkedDesign] = useState(false);
+  const [gallerySubmissionRequested, setGallerySubmissionRequested] = useState(false);
   
   const { user, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -184,6 +185,7 @@ const Booking = () => {
     const loadLinkedDesign = async () => {
       if (!isAuthenticated || !linkedDesignId) {
         setLinkedDesign(null);
+        setGallerySubmissionRequested(false);
         return;
       }
 
@@ -201,6 +203,7 @@ const Booking = () => {
         }
 
         setLinkedDesign(matchedDesign);
+        setGallerySubmissionRequested(false);
 
         if (!values.tattooStyle && matchedDesign.style) {
           handleChange('tattooStyle', matchedDesign.style);
@@ -263,6 +266,7 @@ const Booking = () => {
       preferredDate: selectedDate,
       preferredTime: getTimeSlot(selectedTime), // Convert to backend enum format
       tattooDesignId: linkedDesign?._id,
+      gallerySubmissionRequested: linkedDesign?.aiGenerated ? gallerySubmissionRequested : false,
       notes: values.specialRequests || ''
     };
 
@@ -320,6 +324,7 @@ const Booking = () => {
     setSelectedTime('');
     setShowConfirmation(false);
     setBookingId(null);
+    setGallerySubmissionRequested(false);
     resetForm();
     clearError();
   };
@@ -720,7 +725,36 @@ const Booking = () => {
                     <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
                       <p className="text-sm font-medium text-primary-900">{linkedDesign.title}</p>
                       <p className="mt-1 text-sm text-primary-700 line-clamp-3">{linkedDesign.description}</p>
+                      {linkedDesign.aiGenerated && (
+                        <p className="mt-2 text-xs text-primary-700">
+                          Gallery submission: {gallerySubmissionRequested ? 'Requested (pending admin approval)' : 'Not requested'}
+                        </p>
+                      )}
                     </div>
+                  </div>
+                )}
+
+                {linkedDesign && (
+                  <div className="rounded-lg border border-secondary-200 bg-secondary-50 p-4">
+                    <p className="text-sm font-semibold text-secondary-900">Gallery submission</p>
+                    <p className="mt-1 text-sm text-secondary-700">
+                      If approved by admin, your AI design can appear in the public gallery.
+                    </p>
+                    {linkedDesign.aiGenerated ? (
+                      <label className="mt-3 flex items-start gap-3 text-sm text-secondary-800">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
+                          checked={gallerySubmissionRequested}
+                          onChange={(e) => setGallerySubmissionRequested(e.target.checked)}
+                        />
+                        <span>Yes, submit this AI design for admin review.</span>
+                      </label>
+                    ) : (
+                      <p className="mt-3 text-xs text-secondary-600">
+                        Only AI-generated designs can be submitted to the gallery.
+                      </p>
+                    )}
                   </div>
                 )}
                 

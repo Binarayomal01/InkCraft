@@ -8,9 +8,11 @@ const BOOKING_POPULATE_OPTIONS = [
   { path: 'userId', select: 'name email phone' },
   {
     path: 'tattooDesignId',
-    select: 'title description style size imageUrl aiGenerated prompt createdAt'
+    select: 'title description style size imageUrl aiGenerated prompt createdAt gallerySubmissionStatus isGalleryDesign'
   }
 ];
+
+const normalizeBoolean = (value) => value === true || value === 'true';
 
 const getLinkedUserDesign = async (tattooDesignId, userId) => {
   if (!mongoose.Types.ObjectId.isValid(tattooDesignId)) {
@@ -21,7 +23,45 @@ const getLinkedUserDesign = async (tattooDesignId, userId) => {
     _id: tattooDesignId,
     createdBy: userId,
     isActive: true
-  }).select('_id title description style size imageUrl aiGenerated prompt createdAt');
+  }).select('_id title description style size imageUrl aiGenerated prompt createdAt gallerySubmissionStatus isGalleryDesign');
+};
+
+const requestGallerySubmission = async (designId, userId) => {
+  await TattooDesign.updateOne(
+    {
+      _id: designId,
+      createdBy: userId,
+      isActive: true,
+      isGalleryDesign: false,
+      gallerySubmissionStatus: { $ne: 'approved' }
+    },
+    {
+      $set: {
+        gallerySubmissionStatus: 'pending',
+        gallerySubmittedAt: new Date(),
+        galleryReviewedAt: null
+      }
+    }
+  );
+};
+
+const clearGallerySubmission = async (designId, userId) => {
+  await TattooDesign.updateOne(
+    {
+      _id: designId,
+      createdBy: userId,
+      isActive: true,
+      isGalleryDesign: false,
+      gallerySubmissionStatus: 'pending'
+    },
+    {
+      $set: {
+        gallerySubmissionStatus: 'none',
+        gallerySubmittedAt: null,
+        galleryReviewedAt: null
+      }
+    }
+  );
 };
 
 // @desc    Create a new booking
@@ -37,7 +77,8 @@ const createBooking = async (req, res) => {
       preferredDate,
       preferredTime,
       notes,
-      tattooDesignId
+      tattooDesignId,
+      gallerySubmissionRequested
     } = req.body;
 
     // Validate required fields
@@ -86,6 +127,26 @@ const createBooking = async (req, res) => {
       }
     }
 
+    const wantsGallerySubmission = normalizeBoolean(gallerySubmissionRequested);
+
+    if (wantsGallerySubmission) {
+      if (!linkedDesign) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a saved AI design before requesting gallery submission'
+        });
+      }
+
+      if (!linkedDesign.aiGenerated) {
+        return res.status(400).json({
+          success: false,
+          message: 'Only AI-generated designs can be submitted to the public gallery'
+        });
+      }
+
+      await requestGallerySubmission(linkedDesign._id, req.user.userId);
+    }
+
     // Create booking
     const booking = new Booking({
       userId: req.user.userId,
@@ -97,6 +158,7 @@ const createBooking = async (req, res) => {
       preferredTime,
       notes: notes || '',
       tattooDesignId: linkedDesign ? linkedDesign._id : undefined,
+      gallerySubmissionRequested: wantsGallerySubmission,
       status: 'pending'
     });
 
@@ -244,8 +306,13 @@ const updateBooking = async (req, res) => {
       preferredDate,
       preferredTime,
       notes,
-      tattooDesignId
+      tattooDesignId,
+      gallerySubmissionRequested
     } = req.body;
+
+    const previousDesignId = booking.tattooDesignId ? booking.tattooDesignId.toString() : null;
+    const hasGalleryFlag = gallerySubmissionRequested !== undefined;
+    const wantsGallerySubmission = hasGalleryFlag ? normalizeBoolean(gallerySubmissionRequested) : booking.gallerySubmissionRequested;
 
     // Update fields if provided
     if (tattooIdea !== undefined) booking.tattooIdea = tattooIdea;
@@ -257,6 +324,9 @@ const updateBooking = async (req, res) => {
     if (tattooDesignId !== undefined) {
       if (tattooDesignId === null || tattooDesignId === '') {
         booking.tattooDesignId = undefined;
+        if (!hasGalleryFlag && booking.gallerySubmissionRequested) {
+          booking.gallerySubmissionRequested = false;
+        }
       } else {
         const linkedDesign = await getLinkedUserDesign(tattooDesignId, req.user.userId);
 
@@ -269,6 +339,10 @@ const updateBooking = async (req, res) => {
 
         booking.tattooDesignId = linkedDesign._id;
       }
+    }
+
+    if (hasGalleryFlag) {
+      booking.gallerySubmissionRequested = wantsGallerySubmission;
     }
     
     // Check for date/time changes and validate against double booking
@@ -305,6 +379,49 @@ const updateBooking = async (req, res) => {
       // Update the fields
       if (dateChanged) booking.preferredDate = newDate;
       if (timeChanged) booking.preferredTime = newTime;
+    }
+
+    const nextDesignId = booking.tattooDesignId ? booking.tattooDesignId.toString() : null;
+
+    if (previousDesignId && previousDesignId !== nextDesignId && booking.gallerySubmissionRequested) {
+      await clearGallerySubmission(previousDesignId, req.user.userId);
+    }
+
+    if (!hasGalleryFlag && booking.gallerySubmissionRequested && nextDesignId && previousDesignId !== nextDesignId) {
+      const linkedDesign = await getLinkedUserDesign(nextDesignId, req.user.userId);
+      if (linkedDesign?.aiGenerated) {
+        await requestGallerySubmission(linkedDesign._id, req.user.userId);
+      }
+    }
+
+    if (hasGalleryFlag) {
+      if (wantsGallerySubmission) {
+        if (!nextDesignId) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please select a saved AI design before requesting gallery submission'
+          });
+        }
+
+        const linkedDesign = await getLinkedUserDesign(nextDesignId, req.user.userId);
+        if (!linkedDesign) {
+          return res.status(400).json({
+            success: false,
+            message: 'Selected design was not found in your saved designs'
+          });
+        }
+
+        if (!linkedDesign.aiGenerated) {
+          return res.status(400).json({
+            success: false,
+            message: 'Only AI-generated designs can be submitted to the public gallery'
+          });
+        }
+
+        await requestGallerySubmission(linkedDesign._id, req.user.userId);
+      } else if (previousDesignId) {
+        await clearGallerySubmission(previousDesignId, req.user.userId);
+      }
     }
 
     await booking.save();
@@ -389,13 +506,34 @@ const cancelBooking = async (req, res) => {
 // @access  Private (Admin)
 const getAllBookings = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const { page = 1, limit = 10, status, timeFilter = 'all', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
     const skip = (page - 1) * limit;
 
     // Build query filter
     const filter = {};
     if (status && status !== 'all') {
       filter.status = status;
+    }
+
+    if (timeFilter && timeFilter !== 'all') {
+      const now = new Date();
+      const dateThreshold = new Date(now);
+
+      switch (timeFilter) {
+        case 'week':
+          dateThreshold.setDate(now.getDate() - 7);
+          break;
+        case 'month':
+          dateThreshold.setMonth(now.getMonth() - 1);
+          break;
+        case 'quarter':
+          dateThreshold.setMonth(now.getMonth() - 3);
+          break;
+        default:
+          dateThreshold.setDate(now.getDate() - 7);
+      }
+
+      filter.createdAt = { $gte: dateThreshold };
     }
 
     // Build sort object
@@ -413,6 +551,7 @@ const getAllBookings = async (req, res) => {
 
     // Get status counts for dashboard
     const statusCounts = await Booking.aggregate([
+      { $match: filter },
       {
         $group: {
           _id: '$status',

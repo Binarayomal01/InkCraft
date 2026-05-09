@@ -20,6 +20,9 @@ const DesignManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editingDesignId, setEditingDesignId] = useState(null);
+  const [gallerySubmissions, setGallerySubmissions] = useState([]);
+  const [galleryFilter, setGalleryFilter] = useState('pending');
+  const [reviewingId, setReviewingId] = useState(null);
   
   const { loading, error, request, clearError } = useApi();
   const { isDark } = useTheme();
@@ -39,6 +42,13 @@ const DesignManagement = () => {
     { value: 'Biomechanical', label: 'Biomechanical' },
     { value: 'Portrait', label: 'Portrait' },
     { value: 'Other', label: 'Other' }
+  ];
+
+  const galleryStatusOptions = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'all', label: 'All' }
   ];
 
   // Mock designs data for demonstration
@@ -135,9 +145,28 @@ const DesignManagement = () => {
     }
   };
 
+  const fetchGallerySubmissions = async () => {
+    try {
+      const params = galleryFilter === 'all' ? {} : { status: galleryFilter };
+      const response = await request(() => tattooDesignService.adminGetGallerySubmissions(params));
+      if (response?.data?.data?.designs) {
+        setGallerySubmissions(response.data.data.designs);
+      } else {
+        setGallerySubmissions([]);
+      }
+    } catch (err) {
+      console.error('[DesignManagement] ✗ Error fetching gallery submissions:', err);
+      setGallerySubmissions([]);
+    }
+  };
+
   useEffect(() => {
     fetchDesigns();
   }, []);
+
+  useEffect(() => {
+    fetchGallerySubmissions();
+  }, [galleryFilter]);
 
   // Filter and search designs
   useEffect(() => {
@@ -167,6 +196,19 @@ const DesignManagement = () => {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleReviewSubmission = async (designId, decision) => {
+    setReviewingId(designId);
+    try {
+      await request(() => tattooDesignService.adminReviewGallerySubmission(designId, decision));
+      await fetchGallerySubmissions();
+      await fetchDesigns();
+    } catch (err) {
+      console.error('[DesignManagement] ✗ Error reviewing submission:', err);
+    } finally {
+      setReviewingId(null);
+    }
   };
 
   const handleDesignClick = (design) => {
@@ -446,6 +488,79 @@ const DesignManagement = () => {
           {typeof error === 'string' ? error : 'An error occurred while loading designs'}
         </Alert>
       )}
+
+      <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className={`text-lg font-display font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Gallery Submission Queue
+            </h2>
+            <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+              Review AI designs submitted by users before they appear in the public gallery.
+            </p>
+          </div>
+          <div className="w-full md:w-60">
+            <Select
+              label="Status"
+              value={galleryFilter}
+              onChange={(e) => setGalleryFilter(e.target.value)}
+              options={galleryStatusOptions}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {gallerySubmissions.length === 0 ? (
+            <div className={`rounded-lg border p-4 text-sm ${isDark ? 'border-dark-700 text-gold-300' : 'border-gray-200 text-gray-600'}`}>
+              No gallery submissions found for this status.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {gallerySubmissions.map((design) => (
+                <div
+                  key={design._id}
+                  className={`flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between ${
+                    isDark ? 'border-dark-700 bg-dark-800' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div>
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</p>
+                    <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
+                      By {design.createdBy?.name || 'User'} · Submitted {design.gallerySubmittedAt ? formatDate(design.gallerySubmittedAt) : 'N/A'}
+                    </p>
+                    <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      design.gallerySubmissionStatus === 'pending'
+                        ? isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
+                        : design.gallerySubmissionStatus === 'approved'
+                          ? isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-800'
+                          : isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {design.gallerySubmissionStatus}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="primary"
+                      disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
+                      onClick={() => handleReviewSubmission(design._id, 'approved')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="danger"
+                      disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
+                      onClick={() => handleReviewSubmission(design._id, 'rejected')}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Filters and Search */}
       <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>

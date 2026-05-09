@@ -84,6 +84,10 @@ const bookingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TattooDesign'
   },
+  gallerySubmissionRequested: {
+    type: Boolean,
+    default: false
+  },
   estimatedDuration: {
     type: Number, // in hours
     min: 1,
