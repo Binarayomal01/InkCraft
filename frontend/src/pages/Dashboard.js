@@ -29,8 +29,30 @@ const Dashboard = () => {
   const [reviews, setReviews] = useState({});
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [selectedBookingForReview, setSelectedBookingForReview] = useState(null);
+  const [settingsMessage, setSettingsMessage] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    phone: '',
+    street: '',
+    city: '',
+    state: '',
+    zipCode: ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [emailForm, setEmailForm] = useState({
+    currentPassword: '',
+    newEmail: '',
+    confirmEmail: ''
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
   
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, updateProfile, changePassword, changeEmail } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
 
@@ -97,6 +119,19 @@ const Dashboard = () => {
   useEffect(() => {
     fetchDashboardData();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    setProfileForm({
+      name: user.name || '',
+      phone: user.phone || '',
+      street: user.address?.street || '',
+      city: user.address?.city || '',
+      state: user.address?.state || '',
+      zipCode: user.address?.zipCode || ''
+    });
+  }, [user]);
 
   // Fetch reviews for completed bookings
   const fetchReviews = async (bookingIds) => {
@@ -263,6 +298,86 @@ const Dashboard = () => {
     }
   };
 
+  const handleProfileSubmit = async (event) => {
+    event.preventDefault();
+    setSettingsMessage(null);
+    setSavingProfile(true);
+
+    try {
+      const profilePayload = {
+        name: profileForm.name,
+        phone: profileForm.phone,
+        address: {
+          street: profileForm.street,
+          city: profileForm.city,
+          state: profileForm.state,
+          zipCode: profileForm.zipCode
+        }
+      };
+
+      const result = await updateProfile(profilePayload);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update profile');
+      }
+
+      setSettingsMessage({ type: 'success', text: 'Profile details updated successfully.' });
+    } catch (err) {
+      setSettingsMessage({ type: 'error', text: err.message || 'Failed to update profile.' });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault();
+    setSettingsMessage(null);
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setSettingsMessage({ type: 'error', text: 'New password and confirm password do not match.' });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const result = await changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to change password');
+      }
+
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setSettingsMessage({ type: 'success', text: 'Password changed successfully.' });
+    } catch (err) {
+      setSettingsMessage({ type: 'error', text: err.message || 'Failed to change password.' });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleEmailSubmit = async (event) => {
+    event.preventDefault();
+    setSettingsMessage(null);
+
+    if (emailForm.newEmail.trim().toLowerCase() !== emailForm.confirmEmail.trim().toLowerCase()) {
+      setSettingsMessage({ type: 'error', text: 'New email and confirm email do not match.' });
+      return;
+    }
+
+    setChangingEmail(true);
+    try {
+      const result = await changeEmail(emailForm.currentPassword, emailForm.newEmail);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to change email');
+      }
+
+      setEmailForm({ currentPassword: '', newEmail: '', confirmEmail: '' });
+      setSettingsMessage({ type: 'success', text: 'Email updated successfully.' });
+    } catch (err) {
+      setSettingsMessage({ type: 'error', text: err.message || 'Failed to change email.' });
+    } finally {
+      setChangingEmail(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -274,7 +389,8 @@ const Dashboard = () => {
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'bookings', label: 'My Bookings' },
-    { id: 'designs', label: 'Saved Designs' }
+    { id: 'designs', label: 'Saved Designs' },
+    { id: 'settings', label: 'Settings' }
   ];
 
   return (
@@ -291,7 +407,10 @@ const Dashboard = () => {
                 Manage your bookings, view saved designs, and track your tattoo journey.
               </p>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" onClick={() => setSelectedTab('settings')}>
+                Account Settings
+              </Button>
               <Link to="/book">
                 <Button variant="primary">
                   Book New Appointment
@@ -779,6 +898,186 @@ const Dashboard = () => {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Settings Tab */}
+          {selectedTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className={`text-2xl font-display font-bold ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Account Settings</h2>
+              </div>
+
+              {settingsMessage && (
+                <Alert
+                  type={settingsMessage.type}
+                  onClose={() => setSettingsMessage(null)}
+                >
+                  {settingsMessage.text}
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+                  <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Profile Information</h3>
+                  <form className="space-y-4" onSubmit={handleProfileSubmit}>
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Full Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.name}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Phone Number</label>
+                      <input
+                        type="tel"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Street</label>
+                        <input
+                          type="text"
+                          value={profileForm.street}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, street: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>City</label>
+                        <input
+                          type="text"
+                          value={profileForm.city}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, city: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>State</label>
+                        <input
+                          type="text"
+                          value={profileForm.state}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, state: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Zip Code</label>
+                        <input
+                          type="text"
+                          value={profileForm.zipCode}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, zipCode: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                        />
+                      </div>
+                    </div>
+
+                    <Button type="submit" variant="primary" loading={savingProfile} disabled={savingProfile}>
+                      Save Profile
+                    </Button>
+                  </form>
+                </div>
+
+                <div className="space-y-6">
+                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Change Password</h3>
+                    <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Current Password</label>
+                        <input
+                          type="password"
+                          value={passwordForm.currentPassword}
+                          onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>New Password</label>
+                        <input
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Confirm New Password</label>
+                        <input
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <Button type="submit" variant="outline" loading={changingPassword} disabled={changingPassword}>
+                        Update Password
+                      </Button>
+                    </form>
+                  </div>
+
+                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Change Email</h3>
+                    <form className="space-y-4" onSubmit={handleEmailSubmit}>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-secondary-600'}`}>
+                        Current email: <span className="font-semibold">{user?.email}</span>
+                      </p>
+
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Current Password</label>
+                        <input
+                          type="password"
+                          value={emailForm.currentPassword}
+                          onChange={(e) => setEmailForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>New Email</label>
+                        <input
+                          type="email"
+                          value={emailForm.newEmail}
+                          onChange={(e) => setEmailForm((prev) => ({ ...prev, newEmail: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className={`block text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-secondary-700'}`}>Confirm New Email</label>
+                        <input
+                          type="email"
+                          value={emailForm.confirmEmail}
+                          onChange={(e) => setEmailForm((prev) => ({ ...prev, confirmEmail: e.target.value }))}
+                          className={`w-full rounded-lg px-3 py-2 border ${isDark ? 'bg-dark-800 border-dark-700 text-gray-100' : 'bg-white border-secondary-300 text-secondary-900'}`}
+                          required
+                        />
+                      </div>
+
+                      <Button type="submit" variant="outline" loading={changingEmail} disabled={changingEmail}>
+                        Update Email
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

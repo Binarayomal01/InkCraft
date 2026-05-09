@@ -13,6 +13,8 @@ const generateToken = (userId, role) => {
   );
 };
 
+const isValidEmail = (email) => /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/.test(email);
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
@@ -313,6 +315,100 @@ const changePassword = async (req, res) => {
   }
 };
 
+// @desc    Change user email
+// @route   PUT /api/auth/change-email
+// @access  Private
+const changeEmail = async (req, res) => {
+  try {
+    const { currentPassword, newEmail } = req.body;
+
+    if (!currentPassword || !newEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new email are required'
+      });
+    }
+
+    const normalizedEmail = String(newEmail).trim().toLowerCase();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address'
+      });
+    }
+
+    const user = await User.findById(req.user.userId).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    if (user.email === normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'New email must be different from your current email'
+      });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email is already in use'
+      });
+    }
+
+    user.email = normalizedEmail;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Email changed successfully',
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          address: user.address,
+          profileImage: user.profileImage,
+          preferences: user.preferences,
+          updatedAt: user.updatedAt
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Change email error:', error);
+
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationErrors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while changing email'
+    });
+  }
+};
+
 // @desc    Request password reset email
 // @route   POST /api/auth/forgot-password
 // @access  Public
@@ -512,6 +608,7 @@ module.exports = {
   getUserProfile,
   updateUserProfile,
   changePassword,
+  changeEmail,
   forgotPassword,
   resetPassword,
   adminLogin,

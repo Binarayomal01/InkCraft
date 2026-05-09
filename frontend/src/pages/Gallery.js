@@ -281,9 +281,11 @@ const Gallery = () => {
                         <div className={`aspect-square rounded-lg mb-4 flex items-center justify-center transition-colors duration-300 relative ${isDark ? 'bg-gradient-to-br from-gold-500/10 to-blood-500/10 group-hover:from-gold-500/20 group-hover:to-blood-500/20' : 'bg-gradient-to-br from-blue-100 to-purple-100 group-hover:from-blue-200 group-hover:to-purple-200'}`}>
                           {design.imageUrl ? (
                             <img
-                              src={design.imageUrl}
+                              src={design.thumbnailUrl || design.imageUrl}
                               alt={design.title}
                               className="w-full h-full object-cover rounded-lg"
+                              loading="lazy"
+                              decoding="async"
                               onError={(e) => { e.target.style.display = 'none'; }}
                             />
                           ) : (

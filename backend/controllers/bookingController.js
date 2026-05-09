@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const { Booking, TattooDesign } = require('../models');
 const {
-  sendBookingConfirmationEmail,
   sendBookingStatusEmail
 } = require('../services/emailService');
 
@@ -105,19 +104,6 @@ const createBooking = async (req, res) => {
 
     // Populate user info for response
     await booking.populate(BOOKING_POPULATE_OPTIONS);
-
-    const bookingUser = booking.userId;
-    if (bookingUser && bookingUser.email) {
-      try {
-        await sendBookingConfirmationEmail({
-          to: bookingUser.email,
-          name: bookingUser.name,
-          booking
-        });
-      } catch (emailError) {
-        console.error('Booking confirmation email error:', emailError.message);
-      }
-    }
 
     res.status(201).json({
       success: true,

@@ -198,9 +198,11 @@ const Home = () => {
                   <div className="aspect-square bg-gradient-to-br from-dark-700 to-dark-800 rounded-lg mb-4 flex items-center justify-center relative">
                     {design.imageUrl ? (
                       <img
-                        src={design.imageUrl}
+                        src={design.thumbnailUrl || design.imageUrl}
                         alt={design.title}
                         className="w-full h-full object-cover rounded-lg"
+                        loading="lazy"
+                        decoding="async"
                         onError={(e) => { e.target.style.display = 'none'; }}
                       />
                     ) : (

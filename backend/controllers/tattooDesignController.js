@@ -1,3 +1,4 @@
+const sharp = require('sharp');
 const { TattooDesign } = require('../models');
 
 const AI_STYLE_OPTIONS = [
@@ -70,6 +71,8 @@ const AI_IMAGE_PROVIDER = (process.env.AI_IMAGE_PROVIDER || '').trim().toLowerCa
 const AI_IMAGE_MODEL = (process.env.AI_IMAGE_MODEL || '').trim() || 'flux';
 const AI_IMAGE_WIDTH = parseImageDimension(process.env.AI_IMAGE_WIDTH, 1024);
 const AI_IMAGE_HEIGHT = parseImageDimension(process.env.AI_IMAGE_HEIGHT, 1024);
+const MAX_INLINE_IMAGE_LENGTH = 10000;
+const THUMBNAIL_SIZE = 420;
 
 const STUDIO_BASE_PROMPT = [
   'You are InkCraft Studio\'s senior tattoo concept assistant.',
@@ -497,6 +500,7 @@ const getAllDesigns = async (req, res) => {
       maxPrice,
       search,
       featured,
+      includeImages = 'false',
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -543,26 +547,10 @@ const getAllDesigns = async (req, res) => {
       .lean(); // Convert to plain JavaScript objects for manipulation
 
     // Handle images in list view for performance
-    // Keep small images, truncate large base64 images
-    const designsWithOptimizedImages = designs.map(design => {
-      const {additionalImages, ...designWithoutAdditional} = design;
-      
-      // If image exists and is base64 (large), provide only a flag
-      // Frontend should use placeholder icons
-      if (design.imageUrl && design.imageUrl.startsWith('data:image') && design.imageUrl.length > 10000) {
-        return {
-          ...designWithoutAdditional,
-          imageUrl: null, // Don't send large base64
-          hasImage: true // Flag that image exists
-        };
-      }
-      
-      // If image is a URL or small enough, keep it
-      return {
-        ...designWithoutAdditional,
-        hasImage: !!(design.imageUrl && design.imageUrl.length > 0)
-      };
-    });
+    const includeFullImages = includeImages === 'true';
+    const designsWithOptimizedImages = await Promise.all(
+      designs.map((design) => optimizeDesignListItem(design, includeFullImages))
+    );
 
     const totalDesigns = await TattooDesign.countDocuments(filter);
     const totalPages = Math.ceil(totalDesigns / limit);
@@ -573,7 +561,10 @@ const getAllDesigns = async (req, res) => {
     const categoryOptions = await TattooDesign.distinct('category', publicFilter);
     const sizeOptions = await TattooDesign.distinct('size', publicFilter);
 
-    console.log(`Returning ${designsWithOptimizedImages.length} designs (images optimized for performance)`);
+    console.log(
+      `Returning ${designsWithOptimizedImages.length} designs ` +
+      (includeFullImages ? '(full images included)' : '(images optimized for performance)')
+    );
 
     res.json({
       success: true,
@@ -669,22 +660,9 @@ const getAllDesignsAdmin = async (req, res) => {
       .select('-likes')
       .lean();
 
-    const designsWithOptimizedImages = designs.map((design) => {
-      const { additionalImages, ...designWithoutAdditional } = design;
-
-      if (design.imageUrl && design.imageUrl.startsWith('data:image') && design.imageUrl.length > 10000) {
-        return {
-          ...designWithoutAdditional,
-          imageUrl: null,
-          hasImage: true
-        };
-      }
-
-      return {
-        ...designWithoutAdditional,
-        hasImage: !!(design.imageUrl && design.imageUrl.length > 0)
-      };
-    });
+    const designsWithOptimizedImages = await Promise.all(
+      designs.map((design) => optimizeDesignListItem(design, false))
+    );
 
     const totalDesigns = await TattooDesign.countDocuments(filter);
     const totalPages = Math.ceil(totalDesigns / parsedLimit);
@@ -1322,4 +1300,56 @@ module.exports = {
   createDesign,
   updateDesign,
   deleteDesign
+};
+
+const buildThumbnailDataUri = async (imageUrl) => {
+  const match = /^data:(.+?);base64,(.+)$/.exec(imageUrl || '');
+
+  if (!match) {
+    return null;
+  }
+
+  const buffer = Buffer.from(match[2], 'base64');
+  const thumbnailBuffer = await sharp(buffer)
+    .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, { fit: 'cover' })
+    .jpeg({ quality: 72 })
+    .toBuffer();
+
+  return `data:image/jpeg;base64,${thumbnailBuffer.toString('base64')}`;
+};
+
+const optimizeDesignListItem = async (design, includeFullImages) => {
+  const { additionalImages, ...designWithoutAdditional } = design;
+  const hasImage = Boolean(design.imageUrl && design.imageUrl.length > 0);
+
+  if (hasImage && design.imageUrl.startsWith('data:image') && design.imageUrl.length > MAX_INLINE_IMAGE_LENGTH) {
+    let thumbnailUrl = null;
+
+    try {
+      thumbnailUrl = await buildThumbnailDataUri(design.imageUrl);
+    } catch (error) {
+      console.warn('Thumbnail generation failed:', error.message);
+    }
+
+    if (!includeFullImages) {
+      return {
+        ...designWithoutAdditional,
+        imageUrl: null,
+        hasImage: true,
+        thumbnailUrl
+      };
+    }
+
+    return {
+      ...designWithoutAdditional,
+      hasImage,
+      thumbnailUrl
+    };
+  }
+
+  return {
+    ...designWithoutAdditional,
+    hasImage,
+    thumbnailUrl: null
+  };
 };

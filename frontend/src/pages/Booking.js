@@ -572,8 +572,12 @@ const Booking = () => {
                         onClick={() => setSelectedDate(date.value)}
                         className={`p-3 text-left rounded-lg border transition-all duration-200 ${
                           selectedDate === date.value
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-secondary-200 hover:border-primary-300 hover:bg-primary-25'
+                            ? (isDark
+                              ? 'border-gold-500 bg-gold-500/15 text-gold-300'
+                              : 'border-blood-600 bg-blood-50 text-blood-700')
+                            : (isDark
+                              ? 'border-dark-700 text-gray-100 hover:border-gold-500/50 hover:bg-dark-800'
+                              : 'border-gray-300 text-gray-900 hover:border-blood-300 hover:bg-blood-50')
                         }`}
                       >
                         <div className="font-medium">{date.dayName}</div>
@@ -596,8 +600,12 @@ const Booking = () => {
                           onClick={() => setSelectedTime(slot.value)}
                           className={`p-3 text-center rounded-lg border transition-all duration-200 ${
                             selectedTime === slot.value
-                              ? 'border-primary-500 bg-primary-50 text-primary-700'
-                              : 'border-secondary-200 hover:border-primary-300 hover:bg-primary-25'
+                              ? (isDark
+                                ? 'border-gold-500 bg-gold-500/15 text-gold-300'
+                                : 'border-blood-600 bg-blood-50 text-blood-700')
+                              : (isDark
+                                ? 'border-dark-700 text-gray-100 hover:border-gold-500/50 hover:bg-dark-800'
+                                : 'border-gray-300 text-gray-900 hover:border-blood-300 hover:bg-blood-50')
                           }`}
                         >
                           {slot.label}

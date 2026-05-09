@@ -244,6 +244,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Change email function
+  const changeEmail = async (currentPassword, newEmail) => {
+    try {
+      const response = await api.put('/auth/change-email', {
+        currentPassword,
+        newEmail
+      });
+
+      const { user } = response.data.data;
+
+      dispatch({
+        type: AUTH_ACTIONS.UPDATE_PROFILE,
+        payload: user
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Email change failed';
+      return { success: false, error: errorMessage };
+    }
+  };
+
   // Clear error function
   const clearError = () => {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
@@ -262,6 +284,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateProfile,
     changePassword,
+    changeEmail,
     clearError
   };
 

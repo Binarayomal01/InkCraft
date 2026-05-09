@@ -44,6 +44,11 @@ router.put('/profile', authenticateToken, asyncHandler(authController.updateUser
 // @access  Private
 router.put('/change-password', authenticateToken, authRateLimit, asyncHandler(authController.changePassword));
 
+// @desc    Change email
+// @route   PUT /api/auth/change-email
+// @access  Private
+router.put('/change-email', authenticateToken, authRateLimit, asyncHandler(authController.changeEmail));
+
 // @desc    Verify JWT token
 // @route   GET /api/auth/verify
 // @access  Private

@@ -61,7 +61,7 @@ export const bookingService = {
 // Tattoo Design service
 export const tattooDesignService = {
   create: (designData) => api.post('/tattoo-designs/user/save', designData),
-  getAll: () => api.get('/tattoo-designs?limit=1000'),
+  getAll: (params = {}) => api.get('/tattoo-designs', { params: { limit: 1000, ...params } }),
   getById: (id) => api.get(`/tattoo-designs/${id}`),
   getUserDesigns: () => api.get('/tattoo-designs/user'),
   update: (id, data) => api.put(`/tattoo-designs/admin/${id}`, data),
