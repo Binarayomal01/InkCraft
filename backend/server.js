@@ -77,3 +77,12 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+//vercel error handling
+app.use(cors({
+  origin: [
+    'https://ink-craft-lilac.vercel.app',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
