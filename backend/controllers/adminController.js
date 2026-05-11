@@ -130,7 +130,31 @@ const getDashboardStats = async (req, res) => {
  */
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find()
+    const { timeFilter = 'all' } = req.query;
+    const filter = {};
+
+    if (timeFilter && timeFilter !== 'all') {
+      const now = new Date();
+      const dateThreshold = new Date(now);
+
+      switch (timeFilter) {
+        case 'week':
+          dateThreshold.setDate(now.getDate() - 7);
+          break;
+        case 'month':
+          dateThreshold.setMonth(now.getMonth() - 1);
+          break;
+        case 'quarter':
+          dateThreshold.setMonth(now.getMonth() - 3);
+          break;
+        default:
+          dateThreshold.setDate(now.getDate() - 7);
+      }
+
+      filter.createdAt = { $gte: dateThreshold };
+    }
+
+    const users = await User.find(filter)
       .select('-password')
       .sort({ createdAt: -1 });
     

@@ -105,7 +105,7 @@ export const adminService = {
   getStats: (timeFilter = 'week') => api.get(`/admin/stats?timeFilter=${timeFilter}`),
   
   // User management
-  getUsers: () => api.get('/admin/users'),
+  getUsers: (params = {}) => api.get('/admin/users', { params }),
   getUserById: (id) => api.get(`/admin/users/${id}`),
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
   deleteUser: (id) => api.delete(`/admin/users/${id}`),

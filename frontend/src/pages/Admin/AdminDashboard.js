@@ -288,11 +288,11 @@ const AdminDashboard = () => {
                 isDark ? 'border-dark-700' : 'border-gray-200'
               }`}>
                 <h2 className={`text-lg font-display font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>New Users</h2>
-                <button className={`text-sm font-medium transition-colors ${
+                <Link to="/admin/users" className={`text-sm font-medium transition-colors ${
                   isDark ? 'text-gold-500 hover:text-gold-400' : 'text-primary-600 hover:text-primary-700'
                 }`}>
                   View all
-                </button>
+                </Link>
               </div>
               <div className={`divide-y ${isDark ? 'divide-dark-700' : 'divide-gray-200'}`}>
                 {stats.recentUsers?.map((user) => (

@@ -917,8 +917,8 @@ const Dashboard = () => {
                 </Alert>
               )}
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''} self-start`}>
                   <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Profile Information</h3>
                   <form className="space-y-4" onSubmit={handleProfileSubmit}>
                     <div>
@@ -988,8 +988,8 @@ const Dashboard = () => {
                   </form>
                 </div>
 
-                <div className="space-y-6">
-                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+                <div className="space-y-6 self-start">
+                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''} self-start`}>
                     <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Change Password</h3>
                     <form className="space-y-4" onSubmit={handlePasswordSubmit}>
                       <div>
@@ -1031,7 +1031,7 @@ const Dashboard = () => {
                     </form>
                   </div>
 
-                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''}`}>
+                  <div className={`card ${isDark ? 'bg-dark-900 border-dark-700' : ''} self-start`}>
                     <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-secondary-900'}`}>Change Email</h3>
                     <form className="space-y-4" onSubmit={handleEmailSubmit}>
                       <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-secondary-600'}`}>
@@ -1295,16 +1295,6 @@ const Dashboard = () => {
             
             {/* Actions */}
             <div className="flex gap-3">
-              <Link to="/booking" className="flex-1">
-                <Button variant="primary" fullWidth>
-                  Book This Design
-                </Button>
-              </Link>
-              <Link to="/ai-design" className="flex-1">
-                <Button variant="outline" fullWidth>
-                  Customize with AI
-                </Button>
-              </Link>
               <Button
                 variant="danger"
                 onClick={() => handleDeleteDesign(selectedDesign._id)}

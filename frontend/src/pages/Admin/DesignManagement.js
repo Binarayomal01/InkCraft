@@ -198,6 +198,26 @@ const DesignManagement = () => {
     });
   };
 
+  const resolveDesignImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    if (imageUrl.startsWith('data:image') || imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+
+    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const serverBase = apiBase.replace(/\/api\/?$/, '');
+
+    if (imageUrl.startsWith('/')) {
+      return `${serverBase}${imageUrl}`;
+    }
+
+    return `${serverBase}/${imageUrl}`;
+  };
+
+  const getPreviewUrl = (design) => (
+    resolveDesignImageUrl(design?.imageUrl) || design?.thumbnailUrl || null
+  );
+
   const handleReviewSubmission = async (designId, decision) => {
     setReviewingId(designId);
     try {
@@ -523,23 +543,50 @@ const DesignManagement = () => {
                     isDark ? 'border-dark-700 bg-dark-800' : 'border-gray-200 bg-gray-50'
                   }`}
                 >
-                  <div>
-                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</p>
-                    <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
-                      By {design.createdBy?.name || 'User'} · Submitted {design.gallerySubmittedAt ? formatDate(design.gallerySubmittedAt) : 'N/A'}
-                    </p>
-                    <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      design.gallerySubmissionStatus === 'pending'
-                        ? isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
-                        : design.gallerySubmissionStatus === 'approved'
-                          ? isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-800'
-                          : isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-800'
+                  <div className="flex items-center gap-4">
+                    <div className={`h-20 w-20 rounded-lg overflow-hidden flex items-center justify-center ${
+                      isDark ? 'bg-dark-700' : 'bg-gradient-to-br from-primary-100 to-accent-100'
                     }`}>
-                      {design.gallerySubmissionStatus}
-                    </span>
+                      {getPreviewUrl(design) ? (
+                        <img
+                          src={getPreviewUrl(design)}
+                          alt={design.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <svg className={`w-8 h-8 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</p>
+                      <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
+                        By {design.createdBy?.name || 'User'} · Submitted {design.gallerySubmittedAt ? formatDate(design.gallerySubmittedAt) : 'N/A'}
+                      </p>
+                      <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        design.gallerySubmissionStatus === 'pending'
+                          ? isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
+                          : design.gallerySubmissionStatus === 'approved'
+                            ? isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-800'
+                            : isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {design.gallerySubmissionStatus}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedDesign(design);
+                        setShowModal(true);
+                      }}
+                    >
+                      Preview
+                    </Button>
                     <Button
                       variant="primary"
                       disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
@@ -713,15 +760,15 @@ const DesignManagement = () => {
             <div className={`aspect-video rounded-lg flex items-center justify-center relative ${
               isDark ? 'bg-dark-700' : 'bg-gradient-to-br from-primary-100 to-accent-100'
             }`}>
-              {selectedDesign.imageUrl ? (
+              {getPreviewUrl(selectedDesign) ? (
                 <img
-                  src={selectedDesign.imageUrl}
+                  src={getPreviewUrl(selectedDesign)}
                   alt={selectedDesign.title}
                   className="w-full h-full object-cover rounded-lg"
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
               ) : null}
-              {(!selectedDesign.imageUrl || true) && (
+              {!getPreviewUrl(selectedDesign) && (
                 <div className="text-center absolute">
                   <svg className={`w-24 h-24 mx-auto mb-4 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />

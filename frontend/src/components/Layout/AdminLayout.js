@@ -149,6 +149,15 @@ const AdminLayout = () => {
       )
     },
     {
+      to: '/admin/users',
+      label: 'Users',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4a4 4 0 110 8 4 4 0 010-8zm0 10c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z" />
+        </svg>
+      )
+    },
+    {
       to: '/admin/designs',
       label: 'Designs',
       icon: (

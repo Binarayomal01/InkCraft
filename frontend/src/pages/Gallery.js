@@ -301,6 +301,15 @@ const Gallery = () => {
                               )}
                             </div>
                           )}
+                          {design.aiGenerated && (
+                            <span
+                              className={`absolute left-3 top-3 rounded-full px-2 py-1 text-xs font-semibold ${
+                                isDark ? 'bg-purple-500/20 text-purple-200 border border-purple-400/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                              }`}
+                            >
+                              AI
+                            </span>
+                          )}
                         </div>
                         
                         {/* Design Info */}
@@ -390,6 +399,17 @@ const Gallery = () => {
                   <p className="text-secondary-600">{formatDate(selectedDesign.createdAt)}</p>
                 </div>
               </div>
+
+              {selectedDesign.aiGenerated && (
+                <div className="rounded-lg border border-purple-200 bg-purple-100 p-4">
+                  <div className="flex items-center gap-2 text-purple-800">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span className="text-sm font-semibold">AI Generated</span>
+                  </div>
+                </div>
+              )}
               
               {selectedDesign.tags && selectedDesign.tags.length > 0 && (
                 <div>
@@ -423,26 +443,6 @@ const Gallery = () => {
                 className="flex-1"
               >
                 {isAuthenticated ? 'Save to My Designs' : 'Login to Save'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleModalClose();
-                  navigate('/booking');
-                }}
-                className="flex-1"
-              >
-                Book Similar Design
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  handleModalClose();
-                  navigate('/ai-design');
-                }}
-                className="flex-1"
-              >
-                Customize with AI
               </Button>
             </div>
           </div>
