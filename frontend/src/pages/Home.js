@@ -196,7 +196,7 @@ const Home = () => {
                   style={{ transitionDelay: `${index * 100}ms` }}
                 >
                   <div className="aspect-square bg-gradient-to-br from-dark-700 to-dark-800 rounded-lg mb-4 flex items-center justify-center relative">
-                    {design.imageUrl ? (
+                    {design.thumbnailUrl || design.imageUrl ? (
                       <img
                         src={design.thumbnailUrl || design.imageUrl}
                         alt={design.title}

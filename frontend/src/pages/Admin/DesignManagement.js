@@ -290,7 +290,7 @@ const DesignManagement = () => {
     // If we're editing and had an existing image, restore the preview to the original
     if (editMode && editingDesignId) {
       const currentDesign = designs.find(d => d._id === editingDesignId);
-      setImagePreview(currentDesign?.imageUrl || null);
+      setImagePreview(getPreviewUrl(currentDesign));
     } else {
       setImagePreview(null);
     }
@@ -313,7 +313,7 @@ const DesignManagement = () => {
     // Don't set selectedImage - this ensures we only upload when user selects a new image
     setSelectedImage(null);
     // Keep the existing image URL for preview
-    setImagePreview(design.imageUrl || null);
+    setImagePreview(getPreviewUrl(design));
     setShowModal(false);
     setShowCreateModal(true);
   };
@@ -327,43 +327,31 @@ const DesignManagement = () => {
     setIsSubmitting(true);
     clearError();
     try {
-      const designData = {
-        title: formData.title,
-        description: formData.description,
-        style: formData.style,
-        category: formData.category,
-        size: formData.size,
-        difficulty: formData.difficulty,
-        estimatedTime: parseFloat(formData.estimatedTime),
-        estimatedPrice: parseFloat(formData.estimatedPrice),
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-        colors: 'Black & Grey', // Default color scheme
-        bodyPlacements: ['Arm'], // Default body placement
-        aiGenerated: false
-      };
-      
-      // Only include image if a NEW image was selected (not just showing preview of existing)
+      const tags = formData.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+      const payload = new FormData();
+
+      payload.append('title', formData.title);
+      payload.append('description', formData.description);
+      payload.append('style', formData.style);
+      payload.append('category', formData.category);
+      payload.append('size', formData.size);
+      payload.append('difficulty', formData.difficulty);
+      payload.append('estimatedTime', String(parseFloat(formData.estimatedTime)));
+      payload.append('estimatedPrice', String(parseFloat(formData.estimatedPrice)));
+      payload.append('colors', 'Black & Grey');
+      payload.append('bodyPlacements', 'Arm');
+      payload.append('aiGenerated', 'false');
+
+      tags.forEach(tag => payload.append('tags', tag));
+
       if (selectedImage instanceof File) {
-        console.log('Converting new image to base64...');
-        const reader = new FileReader();
-        reader.readAsDataURL(selectedImage);
-        await new Promise((resolve) => {
-          reader.onloadend = () => {
-            designData.imageUrl = reader.result;
-            console.log('Image converted, size:', reader.result.length);
-            resolve();
-          };
-        });
-      } else if (!editMode) {
-        // For new designs without image, use null
-        designData.imageUrl = null;
+        payload.append('image', selectedImage);
       }
-      // For edits without new image, don't send imageUrl field at all (will keep existing)
       
       if (editMode && editingDesignId) {
         // Update existing design
         console.log('Updating design:', editingDesignId, 'Has new image:', !!selectedImage);
-        const response = await request(() => tattooDesignService.update(editingDesignId, designData));
+        const response = await request(() => tattooDesignService.update(editingDesignId, payload));
         
         if (response?.data?.data?.design) {
           // Update local state with backend response
@@ -376,20 +364,20 @@ const DesignManagement = () => {
           // Fallback update
           setDesigns(prev => prev.map(design => 
             design._id === editingDesignId 
-              ? { ...design, ...designData, updatedAt: new Date().toISOString() }
+              ? { ...design, ...formData, tags, updatedAt: new Date().toISOString() }
               : design
           ));
         }
       } else {
         // Create new design
         console.log('=== FRONTEND: Creating new design ===');
-        console.log('Design data to send:', JSON.stringify(designData, null, 2));
+        console.log('Design data to send: multipart/form-data');
         console.log('Auth token:', localStorage.getItem('token') ? 'Present' : 'Missing');
         console.log('Token value:', localStorage.getItem('token')?.substring(0, 20) + '...');
         
         try {
           console.log('Calling tattooDesignService.adminCreate...');
-          const response = await request(() => tattooDesignService.adminCreate(designData));
+          const response = await request(() => tattooDesignService.adminCreate(payload));
           console.log('Response received:', response);
           console.log('Response success:', response?.success);
           console.log('Response data:', response?.data);
@@ -415,7 +403,8 @@ const DesignManagement = () => {
             // Fallback to mock data
             const newDesign = {
               _id: Date.now().toString(),
-              ...designData,
+              ...formData,
+              tags,
               createdBy: { _id: 'admin', name: 'Admin' },
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
@@ -670,18 +659,18 @@ const DesignManagement = () => {
                   <div className={`aspect-square flex items-center justify-center transition-colors relative ${
                     isDark ? 'bg-dark-700 group-hover:bg-dark-600' : 'bg-gradient-to-br from-primary-100 to-accent-100 group-hover:from-primary-200 group-hover:to-accent-200'
                   }`}>
-                    {design.imageUrl && !design.imageUrl.endsWith('...') && design.imageUrl.length > 200 ? (
+                    {getPreviewUrl(design) ? (
                       <img
-                        src={design.imageUrl}
+                        src={getPreviewUrl(design)}
                         alt={design.title}
                         className="w-full h-full object-cover"
-                        onError={(e) => {  
+                        onError={(e) => {
                           e.target.style.display = 'none';
                           e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
                         }}
                       />
                     ) : null}
-                    <div className={`text-center ${design.imageUrl && !design.imageUrl.endsWith('...') && design.imageUrl.length > 200 ? 'hidden' : ''}`}>
+                    <div className={`text-center ${getPreviewUrl(design) ? 'hidden' : ''}`}>
                       <svg className={`w-12 h-12 mx-auto mb-2 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>

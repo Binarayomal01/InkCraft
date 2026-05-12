@@ -78,6 +78,10 @@ const tattooDesignSchema = new mongoose.Schema({
     type: String,
     default: '/uploads/designs/placeholder.jpg'
   },
+  imagePublicId: {
+    type: String,
+    default: null
+  },
   additionalImages: [{
     url: String,
     caption: String

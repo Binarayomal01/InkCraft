@@ -1,5 +1,6 @@
 const sharp = require('sharp');
 const { TattooDesign } = require('../models');
+const { cloudinary } = require('../services/cloudinary');
 
 const AI_STYLE_OPTIONS = [
   'Traditional',
@@ -56,6 +57,16 @@ const AI_CATEGORY_OPTIONS = [
 ];
 
 const AI_DIFFICULTY_OPTIONS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
+
+const deleteCloudinaryAsset = async (publicId) => {
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (error) {
+    console.error('Cloudinary delete failed:', error.message);
+  }
+};
 
 function parseImageDimension(value, fallback) {
   const parsed = parseInt(value, 10);
@@ -481,7 +492,7 @@ const generateStructuredMockAIDesign = async (input, compiledPrompt) => {
     artistNotes,
     imageUrl: resolvedImageUrl,
     prompt: compiledPrompt,
-    isAIGenerated: true
+    aiGenerated: true
   };
 };
 
@@ -744,6 +755,10 @@ const getDesignById = async (req, res) => {
       }
     }
 
+    if (!design.aiGenerated && design.prompt) {
+      design.aiGenerated = true;
+    }
+
     // Increment view count
     design.views += 1;
     await design.save();
@@ -908,10 +923,24 @@ const createDesign = async (req, res) => {
       });
     }
     
+    const { imagePublicId: ignoredImagePublicId, ...bodyData } = req.body;
+    const imageUrlFromUpload = req.file ? req.file.path : null;
+    const imagePublicIdFromUpload = req.file ? req.file.filename : null;
+    const normalizedTags = bodyData.tags ? parseListInput(bodyData.tags) : [];
+    const normalizedBodyPlacements = bodyData.bodyPlacements ? parseListInput(bodyData.bodyPlacements) : [];
+
     const designData = {
-      ...req.body,
+      ...bodyData,
       createdBy: req.user.userId,
-      isGalleryDesign: req.body.isGalleryDesign !== undefined ? req.body.isGalleryDesign : true // Admin designs appear in gallery by default
+      isGalleryDesign: req.body.isGalleryDesign !== undefined ? req.body.isGalleryDesign : true, // Admin designs appear in gallery by default
+      ...(normalizedTags.length ? { tags: normalizedTags } : {}),
+      ...(normalizedBodyPlacements.length ? { bodyPlacements: normalizedBodyPlacements } : {}),
+      ...(imageUrlFromUpload
+        ? {
+            imageUrl: imageUrlFromUpload,
+            imagePublicId: imagePublicIdFromUpload
+          }
+        : {})
     };
 
     console.log('Design data to save:', JSON.stringify(designData, null, 2));
@@ -1005,11 +1034,36 @@ const updateDesign = async (req, res) => {
       });
     }
 
+    const hasNewImage = Boolean(req.file);
+
+    if (hasNewImage) {
+      await deleteCloudinaryAsset(design.imagePublicId);
+      design.imageUrl = req.file.path;
+      design.imagePublicId = req.file.filename;
+    }
+
     // Update design with new data
     Object.keys(req.body).forEach(key => {
-      if (key !== '_id' && key !== 'createdBy' && key !== 'likes') {
-        design[key] = req.body[key];
+      const blockedKeys = ['_id', 'createdBy', 'likes', 'imagePublicId'];
+      if (blockedKeys.includes(key)) {
+        return;
       }
+
+      if (hasNewImage && key === 'imageUrl') {
+        return;
+      }
+
+      if (key === 'tags') {
+        design.tags = parseListInput(req.body.tags);
+        return;
+      }
+
+      if (key === 'bodyPlacements') {
+        design.bodyPlacements = parseListInput(req.body.bodyPlacements);
+        return;
+      }
+
+      design[key] = req.body[key];
     });
 
     await design.save();
@@ -1174,6 +1228,10 @@ const reviewGallerySubmission = async (req, res) => {
     design.gallerySubmissionStatus = normalizedDecision;
     design.galleryReviewedAt = new Date();
     design.isGalleryDesign = normalizedDecision === 'approved';
+
+    if (normalizedDecision === 'approved' && !design.aiGenerated && design.prompt) {
+      design.aiGenerated = true;
+    }
 
     await design.save();
 
@@ -1442,6 +1500,7 @@ const buildThumbnailDataUri = async (imageUrl) => {
 const optimizeDesignListItem = async (design, includeFullImages) => {
   const { additionalImages, ...designWithoutAdditional } = design;
   const hasImage = Boolean(design.imageUrl && design.imageUrl.length > 0);
+  const aiGenerated = Boolean(design.aiGenerated || design.prompt);
 
   if (hasImage && design.imageUrl.startsWith('data:image') && design.imageUrl.length > MAX_INLINE_IMAGE_LENGTH) {
     let thumbnailUrl = null;
@@ -1457,20 +1516,23 @@ const optimizeDesignListItem = async (design, includeFullImages) => {
         ...designWithoutAdditional,
         imageUrl: null,
         hasImage: true,
-        thumbnailUrl
+        thumbnailUrl,
+        aiGenerated
       };
     }
 
     return {
       ...designWithoutAdditional,
       hasImage,
-      thumbnailUrl
+      thumbnailUrl,
+      aiGenerated
     };
   }
 
   return {
     ...designWithoutAdditional,
     hasImage,
-    thumbnailUrl: null
+    thumbnailUrl: null,
+    aiGenerated
   };
 };

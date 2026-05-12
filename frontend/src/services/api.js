@@ -64,12 +64,20 @@ export const tattooDesignService = {
   getAll: (params = {}) => api.get('/tattoo-designs', { params: { limit: 1000, ...params } }),
   getById: (id) => api.get(`/tattoo-designs/${id}`),
   getUserDesigns: () => api.get('/tattoo-designs/user'),
-  update: (id, data) => api.put(`/tattoo-designs/admin/${id}`, data),
+  update: (id, data) => api.put(
+    `/tattoo-designs/admin/${id}`,
+    data,
+    data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined
+  ),
   delete: (id) => api.delete(`/tattoo-designs/user/${id}`),
   generateAI: (prompt) => api.post('/tattoo-designs/ai-generate', prompt),
   // Admin methods
   adminGetAll: () => api.get('/tattoo-designs/admin?limit=1000'),
-  adminCreate: (designData) => api.post('/tattoo-designs/admin', designData),
+  adminCreate: (designData) => api.post(
+    '/tattoo-designs/admin',
+    designData,
+    designData instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined
+  ),
   adminDelete: (id) => api.delete(`/tattoo-designs/admin/${id}`),
   adminGetGallerySubmissions: (params = {}) => api.get('/tattoo-designs/admin/gallery-submissions', { params }),
   adminReviewGallerySubmission: (id, decision) => api.put(`/tattoo-designs/admin/${id}/gallery-approval`, { decision }),

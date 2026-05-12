@@ -279,7 +279,7 @@ const Gallery = () => {
                       <div className={`card hover:shadow-lg transition-all duration-300 group-hover:scale-105 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
                         {/* Image Placeholder */}
                         <div className={`aspect-square rounded-lg mb-4 flex items-center justify-center transition-colors duration-300 relative ${isDark ? 'bg-gradient-to-br from-gold-500/10 to-blood-500/10 group-hover:from-gold-500/20 group-hover:to-blood-500/20' : 'bg-gradient-to-br from-blue-100 to-purple-100 group-hover:from-blue-200 group-hover:to-purple-200'}`}>
-                          {design.imageUrl ? (
+                          {design.thumbnailUrl || design.imageUrl ? (
                             <img
                               src={design.thumbnailUrl || design.imageUrl}
                               alt={design.title}
@@ -301,15 +301,6 @@ const Gallery = () => {
                               )}
                             </div>
                           )}
-                          {design.aiGenerated && (
-                            <span
-                              className={`absolute left-3 top-3 rounded-full px-2 py-1 text-xs font-semibold ${
-                                isDark ? 'bg-purple-500/20 text-purple-200 border border-purple-400/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                              }`}
-                            >
-                              AI
-                            </span>
-                          )}
                         </div>
                         
                         {/* Design Info */}
@@ -322,9 +313,16 @@ const Gallery = () => {
                           </p>
                           
                           {/* Style Badge */}
-                          <span className={`inline-block px-2 py-1 text-xs font-medium rounded capitalize ${isDark ? 'bg-gold-500/20 text-gold-400' : 'bg-blue-100 text-blue-700'}`}>
-                            {design.style}
-                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`inline-block px-2 py-1 text-xs font-medium rounded capitalize ${isDark ? 'bg-gold-500/20 text-gold-400' : 'bg-blue-100 text-blue-700'}`}>
+                              {design.style}
+                            </span>
+                            {design.aiGenerated && (
+                              <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${isDark ? 'bg-purple-500/20 text-purple-200 border border-purple-400/40' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}>
+                                AI Generated
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

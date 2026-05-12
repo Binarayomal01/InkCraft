@@ -165,6 +165,42 @@ const Dashboard = () => {
     }
   }, [bookings]);
 
+  useEffect(() => {
+    if (selectedTab !== 'designs') return;
+
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-fade-in');
+          entry.target.style.opacity = '1';
+        }
+      });
+    }, observerOptions);
+
+    const timeoutId = setTimeout(() => {
+      const galleryItems = document.querySelectorAll('.gallery-item');
+
+      galleryItems.forEach(item => {
+        observer.observe(item);
+        const rect = item.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+          item.classList.add('animate-fade-in');
+          item.style.opacity = '1';
+        }
+      });
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      observer.disconnect();
+    };
+  }, [savedDesigns, selectedTab]);
+
   const handleReviewClick = (booking) => {
     setSelectedBookingForReview(booking);
     setShowReviewModal(true);
@@ -834,42 +870,60 @@ const Dashboard = () => {
               
               {savedDesigns.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {savedDesigns.map((design) => (
-                    <div 
-                      key={design._id} 
-                      className="card hover:shadow-lg transition-all duration-300 cursor-pointer hover:scale-105"
+                  {savedDesigns.map((design, index) => (
+                    <div
+                      key={design._id}
+                      className="group cursor-pointer gallery-item opacity-0 transition-all duration-500"
+                      style={{ transitionDelay: `${(index % 12) * 80}ms` }}
                       onClick={() => handleDesignClick(design)}
                     >
-                      <div className="aspect-square bg-gradient-to-br from-primary-100 to-accent-100 rounded-lg mb-4 flex items-center justify-center">
-                        {design.imageUrl ? (
-                          <img
-                            src={design.imageUrl}
-                            alt={design.title}
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : (
-                          <div className="text-center">
-                            <svg className="w-12 h-12 text-primary-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-sm text-primary-600 font-medium">{design.title}</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <h3 className="font-semibold text-secondary-900 mb-1">{design.title}</h3>
-                        <p className="text-sm text-secondary-600 mb-2 line-clamp-2">{design.description}</p>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="inline-block px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded capitalize">
-                            {design.style}
-                          </span>
-                          {design.aiGenerated && (
-                            <span className="inline-block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded">
-                              AI Generated
-                            </span>
+                      <div className={`card hover:shadow-lg transition-all duration-300 group-hover:scale-105 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+                        {/* Image Placeholder */}
+                        <div className={`aspect-square rounded-lg mb-4 flex items-center justify-center transition-colors duration-300 relative ${isDark ? 'bg-gradient-to-br from-gold-500/10 to-blood-500/10 group-hover:from-gold-500/20 group-hover:to-blood-500/20' : 'bg-gradient-to-br from-blue-100 to-purple-100 group-hover:from-blue-200 group-hover:to-purple-200'}`}>
+                          {design.thumbnailUrl || design.imageUrl ? (
+                            <img
+                              src={design.thumbnailUrl || design.imageUrl}
+                              alt={design.title}
+                              className="w-full h-full object-cover rounded-lg"
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="text-center">
+                              <svg className={`w-12 h-12 mx-auto mb-2 ${isDark ? 'text-gold-500' : 'text-blue-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span className={`text-sm font-medium ${isDark ? 'text-gold-500' : 'text-blue-600'}`}>{design.title}</span>
+                              {design.hasImage && (
+                                <span className={`block text-xs mt-2 ${isDark ? 'text-gold-400' : 'text-blue-500'}`}>
+                                  🖼️ Click to view image
+                                </span>
+                              )}
+                            </div>
                           )}
+                        </div>
+
+                        {/* Design Info */}
+                        <div>
+                          <h3 className={`font-semibold mb-1 transition-colors duration-200 ${isDark ? 'text-white group-hover:text-gold-500' : 'text-gray-900 group-hover:text-blue-600'}`}>
+                            {design.title}
+                          </h3>
+                          <p className={`text-sm mb-2 line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {design.description}
+                          </p>
+                          
+                          {/* Style Badge */}
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`inline-block px-2 py-1 text-xs font-medium rounded capitalize ${isDark ? 'bg-gold-500/20 text-gold-400' : 'bg-blue-100 text-blue-700'}`}>
+                              {design.style}
+                            </span>
+                            {design.aiGenerated && (
+                              <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${isDark ? 'bg-purple-500/20 text-purple-200 border border-purple-400/40' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}>
+                                AI Generated
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

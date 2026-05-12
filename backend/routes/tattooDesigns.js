@@ -1,6 +1,7 @@
 const express = require('express');
 const { tattooDesignController } = require('../controllers');
 const { authenticateToken, optionalAuth, requireAdmin, generalRateLimit, asyncHandler } = require('../middleware');
+const { upload } = require('../services/cloudinary');
 
 const router = express.Router();
 
@@ -65,7 +66,14 @@ router.post('/:id/like', authenticateToken, generalRateLimit, asyncHandler(tatto
 // @desc    Create a new design (admin only)
 // @route   POST /api/tattoo-designs/admin
 // @access  Private (Admin)
-router.post('/admin', authenticateToken, requireAdmin, generalRateLimit, asyncHandler(tattooDesignController.createDesign));
+router.post(
+  '/admin',
+  authenticateToken,
+  requireAdmin,
+  generalRateLimit,
+  upload.single('image'),
+  asyncHandler(tattooDesignController.createDesign)
+);
 
 // @desc    Test database connection and save operation
 // @route   POST /api/tattoo-designs/admin/test
@@ -122,7 +130,14 @@ router.post('/admin/test', authenticateToken, requireAdmin, asyncHandler(async (
 // @desc    Update a design (admin only)
 // @route   PUT /api/tattoo-designs/admin/:id
 // @access  Private (Admin)
-router.put('/admin/:id', authenticateToken, requireAdmin, generalRateLimit, asyncHandler(tattooDesignController.updateDesign));
+router.put(
+  '/admin/:id',
+  authenticateToken,
+  requireAdmin,
+  generalRateLimit,
+  upload.single('image'),
+  asyncHandler(tattooDesignController.updateDesign)
+);
 
 // @desc    Approve or reject gallery submission
 // @route   PUT /api/tattoo-designs/admin/:id/gallery-approval
