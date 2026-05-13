@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { handleApiError } from '../utils/api';
 
 // Hook for API calls with loading, error, and success states
@@ -8,7 +8,7 @@ export const useApi = (apiFunction, dependencies = [], immediate = true) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
-  const execute = async (...args) => {
+  const execute = useCallback(async (...args) => {
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -33,7 +33,7 @@ export const useApi = (apiFunction, dependencies = [], immediate = true) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiFunction]);
 
   const reset = () => {
     setData(null);

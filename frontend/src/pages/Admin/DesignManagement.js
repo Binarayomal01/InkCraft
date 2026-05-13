@@ -20,6 +20,7 @@ const DesignManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editingDesignId, setEditingDesignId] = useState(null);
+  const [activeTab, setActiveTab] = useState('designs');
   const [gallerySubmissions, setGallerySubmissions] = useState([]);
   const [galleryFilter, setGalleryFilter] = useState('pending');
   const [reviewingId, setReviewingId] = useState(null);
@@ -49,6 +50,11 @@ const DesignManagement = () => {
     { value: 'approved', label: 'Approved' },
     { value: 'rejected', label: 'Rejected' },
     { value: 'all', label: 'All' }
+  ];
+
+  const tabs = [
+    { value: 'designs', label: 'Designs' },
+    { value: 'submission-queue', label: 'Submission Queue' }
   ];
 
   // Mock designs data for demonstration
@@ -147,7 +153,7 @@ const DesignManagement = () => {
 
   const fetchGallerySubmissions = async () => {
     try {
-      const params = galleryFilter === 'all' ? {} : { status: galleryFilter };
+      const params = { status: galleryFilter };
       const response = await request(() => tattooDesignService.adminGetGallerySubmissions(params));
       if (response?.data?.data?.designs) {
         setGallerySubmissions(response.data.data.designs);
@@ -498,243 +504,270 @@ const DesignManagement = () => {
         </Alert>
       )}
 
-      <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className={`text-lg font-display font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Gallery Submission Queue
-            </h2>
-            <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-              Review AI designs submitted by users before they appear in the public gallery.
-            </p>
-          </div>
-          <div className="w-full md:w-60">
-            <Select
-              label="Status"
-              value={galleryFilter}
-              onChange={(e) => setGalleryFilter(e.target.value)}
-              options={galleryStatusOptions}
-            />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          {gallerySubmissions.length === 0 ? (
-            <div className={`rounded-lg border p-4 text-sm ${isDark ? 'border-dark-700 text-gold-300' : 'border-gray-200 text-gray-600'}`}>
-              No gallery submissions found for this status.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {gallerySubmissions.map((design) => (
-                <div
-                  key={design._id}
-                  className={`flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between ${
-                    isDark ? 'border-dark-700 bg-dark-800' : 'border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`h-20 w-20 rounded-lg overflow-hidden flex items-center justify-center ${
-                      isDark ? 'bg-dark-700' : 'bg-gradient-to-br from-primary-100 to-accent-100'
-                    }`}>
-                      {getPreviewUrl(design) ? (
-                        <img
-                          src={getPreviewUrl(design)}
-                          alt={design.title}
-                          className="h-full w-full object-cover"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      ) : (
-                        <svg className={`w-8 h-8 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</p>
-                      <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
-                        By {design.createdBy?.name || 'User'} · Submitted {design.gallerySubmittedAt ? formatDate(design.gallerySubmittedAt) : 'N/A'}
-                      </p>
-                      <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        design.gallerySubmissionStatus === 'pending'
-                          ? isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
-                          : design.gallerySubmissionStatus === 'approved'
-                            ? isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-800'
-                            : isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {design.gallerySubmissionStatus}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedDesign(design);
-                        setShowModal(true);
-                      }}
-                    >
-                      Preview
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
-                      onClick={() => handleReviewSubmission(design._id, 'approved')}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="danger"
-                      disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
-                      onClick={() => handleReviewSubmission(design._id, 'rejected')}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input
-            label="Search Designs"
-            placeholder="Search by title, description, or tags..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            leftIcon={
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            }
-          />
-          
-          <Select
-            label="Filter by Style"
-            value={selectedStyle}
-            onChange={(e) => setSelectedStyle(e.target.value)}
-            options={styles}
-          />
-          
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedStyle('all');
-                setSearchQuery('');
-                fetchDesigns();
-              }}
-              fullWidth
+      <div className={`rounded-lg shadow p-2 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setActiveTab(tab.value)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === tab.value
+                  ? isDark
+                    ? 'bg-gold-500/20 text-gold-200 border border-gold-500/30'
+                    : 'bg-primary-100 text-primary-700 border border-primary-200'
+                  : isDark
+                    ? 'text-gold-300 hover:bg-dark-800'
+                    : 'text-gray-600 hover:bg-gray-50'
+              }`}
             >
-              Clear Filters
-            </Button>
-          </div>
-        </div>
-        
-        <div className={`mt-4 flex justify-between items-center text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-          <span>{filteredDesigns.length} design(s) found</span>
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Designs Grid */}
-      <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
-        {loading ? (
-          <div className="flex justify-center items-center py-16">
-            <LoadingSpinner size="large" />
+      {activeTab === 'submission-queue' ? (
+        <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className={`text-lg font-display font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Submission Queue
+              </h2>
+              <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                Review AI designs submitted by users before they appear in the public gallery.
+              </p>
+            </div>
+            <div className="w-full md:w-60">
+              <Select
+                label="Status"
+                value={galleryFilter}
+                onChange={(e) => setGalleryFilter(e.target.value)}
+                options={galleryStatusOptions}
+              />
+            </div>
           </div>
-        ) : filteredDesigns.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredDesigns.map((design) => (
-              <div
-                key={design._id}
-                className="cursor-pointer group"
-                onClick={() => handleDesignClick(design)}
-              >
-                <div className={`rounded-lg overflow-hidden transition-shadow ${isDark ? 'bg-dark-800 border border-dark-700 hover:shadow-lg hover:shadow-gold-500/20' : 'bg-white border border-gray-200 hover:shadow-lg'}`}>
-                  {/* Image Placeholder */}
-                  <div className={`aspect-square flex items-center justify-center transition-colors relative ${
-                    isDark ? 'bg-dark-700 group-hover:bg-dark-600' : 'bg-gradient-to-br from-primary-100 to-accent-100 group-hover:from-primary-200 group-hover:to-accent-200'
-                  }`}>
-                    {getPreviewUrl(design) ? (
-                      <img
-                        src={getPreviewUrl(design)}
-                        alt={design.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
-                        }}
-                      />
-                    ) : null}
-                    <div className={`text-center ${getPreviewUrl(design) ? 'hidden' : ''}`}>
-                      <svg className={`w-12 h-12 mx-auto mb-2 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span className={`text-sm font-medium ${isDark ? 'text-gold-300' : 'text-primary-600'}`}>{design.title}</span>
-                      {design.hasImage && (
-                        <span className={`block text-xs mt-1 ${isDark ? 'text-gold-400/70' : 'text-primary-500/70'}`}>
-                          Has image
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Card Content */}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</h3>
-                      {design.aiGenerated && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          AI
-                        </span>
-                      )}
-                    </div>
-                    
-                    <p className={`text-sm line-clamp-2 mb-3 ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
-                      {design.description}
-                    </p>
-                    
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize ${
-                        isDark ? 'bg-gold-500/20 text-gold-300' : 'bg-primary-100 text-primary-700'
+
+          <div className="mt-4">
+            {gallerySubmissions.length === 0 ? (
+              <div className={`rounded-lg border p-4 text-sm ${isDark ? 'border-dark-700 text-gold-300' : 'border-gray-200 text-gray-600'}`}>
+                No gallery submissions found for this status.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {gallerySubmissions.map((design) => (
+                  <div
+                    key={design._id}
+                    className={`flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between ${
+                      isDark ? 'border-dark-700 bg-dark-800' : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`h-20 w-20 rounded-lg overflow-hidden flex items-center justify-center ${
+                        isDark ? 'bg-dark-700' : 'bg-gradient-to-br from-primary-100 to-accent-100'
                       }`}>
-                        {design.style}
-                      </span>
-                      <span className={`text-xs ${isDark ? 'text-gold-400' : 'text-gray-500'}`}>
-                        {formatDate(design.createdAt)}
-                      </span>
+                        {getPreviewUrl(design) ? (
+                          <img
+                            src={getPreviewUrl(design)}
+                            alt={design.title}
+                            className="h-full w-full object-cover"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <svg className={`w-8 h-8 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div>
+                        <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</p>
+                        <p className={`text-sm ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
+                          By {design.createdBy?.name || 'User'} · Submitted {design.gallerySubmittedAt ? formatDate(design.gallerySubmittedAt) : 'N/A'}
+                        </p>
+                        <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          design.gallerySubmissionStatus === 'pending'
+                            ? isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
+                            : design.gallerySubmissionStatus === 'approved'
+                              ? isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-800'
+                              : isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {design.gallerySubmissionStatus}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedDesign(design);
+                          setShowModal(true);
+                        }}
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        variant="primary"
+                        disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
+                        onClick={() => handleReviewSubmission(design._id, 'approved')}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={reviewingId === design._id || design.gallerySubmissionStatus !== 'pending'}
+                        onClick={() => handleReviewSubmission(design._id, 'rejected')}
+                      >
+                        Reject
+                      </Button>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Filters and Search */}
+          <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Input
+                label="Search Designs"
+                placeholder="Search by title, description, or tags..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                leftIcon={
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+              />
+              
+              <Select
+                label="Filter by Style"
+                value={selectedStyle}
+                onChange={(e) => setSelectedStyle(e.target.value)}
+                options={styles}
+              />
+              
+              <div className="flex items-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedStyle('all');
+                    setSearchQuery('');
+                    fetchDesigns();
+                  }}
+                  fullWidth
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            </div>
+            
+            <div className={`mt-4 flex justify-between items-center text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+              <span>{filteredDesigns.length} design(s) found</span>
+            </div>
+          </div>
+
+          {/* Designs Grid */}
+          <div className={`rounded-lg shadow p-6 ${isDark ? 'bg-dark-900 border border-dark-700' : 'bg-white'}`}>
+            {loading ? (
+              <div className="flex justify-center items-center py-16">
+                <LoadingSpinner size="large" />
+              </div>
+            ) : filteredDesigns.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredDesigns.map((design) => (
+                  <div
+                    key={design._id}
+                    className="cursor-pointer group"
+                    onClick={() => handleDesignClick(design)}
+                  >
+                    <div className={`rounded-lg overflow-hidden transition-shadow ${isDark ? 'bg-dark-800 border border-dark-700 hover:shadow-lg hover:shadow-gold-500/20' : 'bg-white border border-gray-200 hover:shadow-lg'}`}>
+                      {/* Image Placeholder */}
+                      <div className={`aspect-square flex items-center justify-center transition-colors relative ${
+                        isDark ? 'bg-dark-700 group-hover:bg-dark-600' : 'bg-gradient-to-br from-primary-100 to-accent-100 group-hover:from-primary-200 group-hover:to-accent-200'
+                      }`}>
+                        {getPreviewUrl(design) ? (
+                          <img
+                            src={getPreviewUrl(design)}
+                            alt={design.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling && (e.target.nextSibling.style.display = 'flex');
+                            }}
+                          />
+                        ) : null}
+                        <div className={`text-center ${getPreviewUrl(design) ? 'hidden' : ''}`}>
+                          <svg className={`w-12 h-12 mx-auto mb-2 ${isDark ? 'text-gold-400' : 'text-primary-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className={`text-sm font-medium ${isDark ? 'text-gold-300' : 'text-primary-600'}`}>{design.title}</span>
+                          {design.hasImage && (
+                            <span className={`block text-xs mt-1 ${isDark ? 'text-gold-400/70' : 'text-primary-500/70'}`}>
+                              Has image
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Card Content */}
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{design.title}</h3>
+                          {design.aiGenerated && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
+                            }`}>
+                              AI
+                            </span>
+                          )}
+                        </div>
+                        
+                        <p className={`text-sm line-clamp-2 mb-3 ${isDark ? 'text-gold-300' : 'text-gray-600'}`}>
+                          {design.description}
+                        </p>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                            isDark ? 'bg-gold-500/20 text-gold-300' : 'bg-primary-100 text-primary-700'
+                          }`}>
+                            {design.style}
+                          </span>
+                          <span className={`text-xs ${isDark ? 'text-gold-400' : 'text-gray-500'}`}>
+                            {formatDate(design.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <svg className={`mx-auto h-12 w-12 ${isDark ? 'text-gold-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h3 className={`mt-2 text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>No designs found</h3>
+                <p className={`mt-1 text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
+                  {searchQuery || selectedStyle !== 'all' 
+                    ? 'Try adjusting your filters or search query.' 
+                    : 'Get started by adding your first design.'
+                  }
+                </p>
+                <div className="mt-6">
+                  <Button variant="primary" onClick={handleCreateDesign}>
+                    Add New Design
+                  </Button>
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        ) : (
-          <div className="text-center py-16">
-            <svg className={`mx-auto h-12 w-12 ${isDark ? 'text-gold-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <h3 className={`mt-2 text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>No designs found</h3>
-            <p className={`mt-1 text-sm ${isDark ? 'text-gold-300' : 'text-gray-500'}`}>
-              {searchQuery || selectedStyle !== 'all' 
-                ? 'Try adjusting your filters or search query.' 
-                : 'Get started by adding your first design.'
-              }
-            </p>
-            <div className="mt-6">
-              <Button variant="primary" onClick={handleCreateDesign}>
-                Add New Design
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Design Details Modal */}
       <Modal

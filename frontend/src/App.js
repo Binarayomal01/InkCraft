@@ -30,6 +30,7 @@ import BookingManagement from './pages/Admin/BookingManagement';
 import DesignManagement from './pages/Admin/DesignManagement';
 import ChatAnalytics from './pages/Admin/ChatAnalytics';
 import UsersManagement from './pages/Admin/UsersManagement';
+import UserAnalytics from './pages/Admin/UserAnalytics';
 
 // Protected route components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -90,6 +91,7 @@ function App() {
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="bookings" element={<BookingManagement />} />
               <Route path="users" element={<UsersManagement />} />
+              <Route path="user-analytics" element={<UserAnalytics />} />
               <Route path="designs" element={<DesignManagement />} />
               <Route path="chat-analytics" element={<ChatAnalytics />} />
             </Route>

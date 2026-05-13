@@ -1150,8 +1150,14 @@ const getGallerySubmissions = async (req, res) => {
       isGalleryDesign: false
     };
 
+    if (status === 'approved' || status === 'all') {
+      delete filter.isGalleryDesign;
+    }
+
     if (status && status !== 'all') {
       filter.gallerySubmissionStatus = status;
+    } else {
+      filter.gallerySubmissionStatus = { $in: ['pending', 'approved', 'rejected'] };
     }
 
     const sortObj = {};

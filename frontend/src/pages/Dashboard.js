@@ -320,6 +320,13 @@ const Dashboard = () => {
     setSelectedDesign(null);
   };
 
+  const handleBookFromDesign = (design) => {
+    if (!design?._id) return;
+    setShowDesignModal(false);
+    setSelectedDesign(null);
+    navigate(`/book?designId=${design._id}`);
+  };
+
   const handleDeleteDesign = async (designId) => {
     if (!window.confirm('Are you sure you want to delete this design?')) return;
     
@@ -1348,7 +1355,13 @@ const Dashboard = () => {
             </div>
             
             {/* Actions */}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="primary"
+                onClick={() => handleBookFromDesign(selectedDesign)}
+              >
+                Book Appointment
+              </Button>
               <Button
                 variant="danger"
                 onClick={() => handleDeleteDesign(selectedDesign._id)}

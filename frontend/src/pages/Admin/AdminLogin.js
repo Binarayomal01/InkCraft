@@ -10,7 +10,7 @@ import Alert from '../../components/UI/Alert';
 
 const AdminLogin = () => {
   const [showAlert, setShowAlert] = useState(false);
-  const { login, isLoading, error, clearError, isAuthenticated, user } = useAuth();
+  const { adminLogin, isLoading, error, clearError, isAuthenticated, user } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
 
@@ -55,7 +55,7 @@ const AdminLogin = () => {
       return;
     }
 
-    const result = await login(values.email, values.password);
+    const result = await adminLogin(values.email, values.password);
     
     if (result.success) {
       if (result.user?.role === 'admin') {
