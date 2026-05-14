@@ -761,6 +761,29 @@ const getAllMessages = async (req, res) => {
   }
 };
 
+// @desc    Delete all chat messages (admin only)
+// @route   DELETE /api/chat/admin/messages
+// @access  Private (Admin)
+const clearChatMessages = async (req, res) => {
+  try {
+    const deleteResult = await ChatMessage.deleteMany({});
+
+    res.json({
+      success: true,
+      message: 'Chat history cleared',
+      data: {
+        deletedCount: deleteResult.deletedCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Clear chat messages error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while clearing chat history'
+    });
+  }
+};
+
 module.exports = {
   // Public methods
   sendMessage,
@@ -774,5 +797,6 @@ module.exports = {
   // Admin methods
   getChatAnalytics,
   getChatQualitySummary,
-  getAllMessages
+  getAllMessages,
+  clearChatMessages
 };

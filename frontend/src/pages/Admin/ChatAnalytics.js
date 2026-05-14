@@ -14,6 +14,8 @@ const ChatAnalytics = () => {
   const [selectedDateRange, setSelectedDateRange] = useState('week');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [clearNotice, setClearNotice] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
   const [analytics, setAnalytics] = useState({
     totalMessages: 0,
     activeConversations: 0,
@@ -269,6 +271,23 @@ const ChatAnalytics = () => {
     fetchChatData();
   }, [fetchChatData]);
 
+  const handleClearHistory = async () => {
+    const confirmed = window.confirm('This will delete all chat history and reset analytics. Continue?');
+    if (!confirmed) {
+      return;
+    }
+
+    setClearNotice('');
+    setIsClearing(true);
+    try {
+      await request(async () => chatService.clearAllMessages());
+      setClearNotice('Chat history cleared. Analytics will rebuild as new messages arrive.');
+      await fetchChatData();
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -344,8 +363,21 @@ const ChatAnalytics = () => {
           >
             Refresh
           </Button>
+          <Button
+            variant="danger"
+            onClick={handleClearHistory}
+            loading={isClearing}
+          >
+            Clear Chat History
+          </Button>
         </div>
       </div>
+
+      {clearNotice && (
+        <Alert type="success" onClose={() => setClearNotice('')}>
+          {clearNotice}
+        </Alert>
+      )}
 
       {error && (
         <Alert type="error" onClose={clearError}>

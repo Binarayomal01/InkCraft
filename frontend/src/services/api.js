@@ -105,6 +105,7 @@ export const chatService = {
   },
   getQualitySummary: (params = {}) => api.get('/chat/admin/quality-summary', { params }),
   getAllMessages: (params = {}) => api.get('/chat/admin/messages', { params }),
+  clearAllMessages: () => api.delete('/chat/admin/messages'),
 };
 
 // Admin services

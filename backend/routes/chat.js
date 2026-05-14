@@ -50,4 +50,9 @@ router.get('/admin/quality-summary', authenticateToken, requireAdmin, asyncHandl
 // @access  Private (Admin)
 router.get('/admin/messages', authenticateToken, requireAdmin, asyncHandler(chatController.getAllMessages));
 
+// @desc    Delete all chat messages (admin only)
+// @route   DELETE /api/chat/admin/messages
+// @access  Private (Admin)
+router.delete('/admin/messages', authenticateToken, requireAdmin, asyncHandler(chatController.clearChatMessages));
+
 module.exports = router;
