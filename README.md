@@ -64,7 +64,3 @@ If you need exact examples, check `DEPLOYMENT.md` or ask me to add a `.env.examp
 ## Notes for reviewers / viva
 - This is a student project — I focused on clear separation between frontend and backend and readable code.
 - AI features are rule-based/mock for demonstration.
-
----
-
-If you want this to read even more like you wrote it, tell me which phrases or sections you want changed and I’ll update the README accordingly.
