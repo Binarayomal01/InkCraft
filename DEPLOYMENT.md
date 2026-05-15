@@ -66,4 +66,3 @@ mongosh --eval "use inkcraft; db.dropDatabase();"
 - Ensure both apps run locally
 - Verify the demo flow above
 
-If you want, I can add a `backend/.env.example` and `frontend/.env.example` next.
